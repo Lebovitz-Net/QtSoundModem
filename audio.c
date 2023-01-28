@@ -42,6 +42,7 @@
 void Debugprintf(const char * format, ...);
 
 extern int Closing;
+extern void Sleep(int MS);
 
 int oss_fd = -1;	/* Single device, both directions. */
 

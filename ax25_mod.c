@@ -194,8 +194,7 @@ BOOL tx_bit_stuffing(UCHAR snd_ch, UCHAR bit)
 
 
 
-
-void interleave(char *s, int len)
+void interleave(UCHAR *s, int len)
 {
 //	var
  // data: string;
@@ -213,7 +212,7 @@ void interleave(char *s, int len)
 
 	char data[1024];
 
-	UINT i,k;
+    UINT i, k;
 	UINT nr_blocks;
 	int n = 0;
 
@@ -226,7 +225,7 @@ void interleave(char *s, int len)
 	{
 		for (k = 0; k < nr_blocks; k++)
 		{
-			if ((i + k * 16) <= len)
+            if ((i + k * 16) <= (UINT)len)
 				data[n++] = s[i + k * 16];
 		}
 	}
@@ -241,6 +240,12 @@ void interleave(char *s, int len)
  // crc: word;
 //begin
 
+extern void InitBuffers();
+extern void EncodeRS(Byte * xData, Byte * xEncoded);
+extern void scrambler(UCHAR * in_buf, int Len);
+extern void fx25_encode_rs(Byte * data, Byte *parity, int pad, int rs_size);
+extern int fx25_decode_rs(Byte * data, int * eras_pos, int no_eras, int pad, int rs_size);
+
 void get_new_frame(UCHAR snd_ch, TStringList * frame_stream)
 {
 	UCHAR header[256];
@@ -249,12 +254,14 @@ void get_new_frame(UCHAR snd_ch, TStringList * frame_stream)
 	int LineLen;
 
 	string ** Items;
+    UNUSED(Items);
 
 	string * myTemp;
 
 	UCHAR temp[1024];
 
 	UINT len, i, size;
+    UNUSED(i);
 	UINT crc;
 
 	tx_bs_bit[snd_ch] = FALSE;
@@ -383,6 +390,7 @@ void get_new_frame(UCHAR snd_ch, TStringList * frame_stream)
 		Byte unscrambled[1024];
 		int count, len;
 		int origlen;
+        UNUSED(origlen);
 
 		len = LineLen;
 		count = (len + 15) / 16;
@@ -413,6 +421,8 @@ void get_new_frame(UCHAR snd_ch, TStringList * frame_stream)
 		{
 			Byte line1[256];
 			int nErr, eras_pos = 0;
+            UNUSED(nErr);
+
 			Byte rs_block[256];
 
 			memcpy(line1, &unscrambled[j], 16);
@@ -836,7 +846,7 @@ int get_new_bit_tail(UCHAR snd_ch, UCHAR bit)
 	{
 	case 0:
     
-		if (tx_tail_cnt[snd_ch] < _txtail)
+        if ((ULONG)tx_tail_cnt[snd_ch] < _txtail)
 		{
 			bit = TX_BIT0;
 			tx_tail_cnt[snd_ch]++;
@@ -850,7 +860,7 @@ int get_new_bit_tail(UCHAR snd_ch, UCHAR bit)
 
 	case 1:
 
-		if (tx_tail_cnt[snd_ch] < _txtail)
+        if ((ULONG)tx_tail_cnt[snd_ch] < _txtail)
 		{
 			if (tx_last_diddle[snd_ch] == TX_BIT0)
 				bit = TX_BIT1;
@@ -870,7 +880,7 @@ int get_new_bit_tail(UCHAR snd_ch, UCHAR bit)
 	
 	case 2:
     
-		if (tx_tail_cnt[snd_ch] < _txtail)
+        if ((ULONG)tx_tail_cnt[snd_ch] < _txtail)
 		{
 			bit = FRAME_FLAG >> (tx_tail_cnt[snd_ch] % 8) & 1;
 			tx_tail_cnt[snd_ch]++;
@@ -938,7 +948,7 @@ int get_new_bit_delay(UCHAR snd_ch, UCHAR bit)
 	{
 	case 0:
    
-		if (tx_delay_cnt[snd_ch] < _txdelay)
+        if ((UCHAR)tx_delay_cnt[snd_ch] < _txdelay)
 		{
 			bit = TX_BIT0;
 			tx_delay_cnt[snd_ch]++;
@@ -952,7 +962,7 @@ int get_new_bit_delay(UCHAR snd_ch, UCHAR bit)
 	
 	case 1:
     
-		if (tx_delay_cnt[snd_ch] < _txdelay)
+        if ((UCHAR)tx_delay_cnt[snd_ch] < _txdelay)
 		{
 			if (tx_last_diddle[snd_ch] == TX_BIT0)
 				bit = TX_BIT1;
@@ -973,7 +983,7 @@ int get_new_bit_delay(UCHAR snd_ch, UCHAR bit)
 
 		// Send Flags
 
-		if (tx_delay_cnt[snd_ch] < _txdelay)
+        if ((UCHAR)tx_delay_cnt[snd_ch] < _txdelay)
 		{
 			bit = FRAME_FLAG >> ((8 - (_txdelay % 8) + tx_delay_cnt[snd_ch]) % 8) & 1;
 			tx_delay_cnt[snd_ch]++;
@@ -1039,6 +1049,9 @@ float make_samples(unsigned char  snd_ch, unsigned char * bitptr)
 	Byte i,qbit,tribit,dibit;
 	float z1,z2,z3,z4;
 	unsigned short b, msb, lsb;
+    UNUSED(b);
+    UNUSED(msb);
+    UNUSED(lsb);
 	unsigned char bit = *bitptr;
 
 	float amp = 0;
@@ -1599,6 +1612,11 @@ float make_samples_calib(UCHAR snd_ch, UCHAR tones)
 }
 
 int amplitude = 22000;
+
+extern int ARDOPSendToCard(int Chan, int Len);
+extern void Flush();
+void SampleSink(int LR, short Sample);
+
 
 void modulator(UCHAR snd_ch, int buf_size)
 {

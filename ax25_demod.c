@@ -27,6 +27,11 @@ extern word MEMRecovery[5];
 
 void  make_rx_frame_FX25(int snd_ch, int rcvr_nr, int emph, string * data);
 string * memory_ARQ(TStringList * buf, string * data);
+extern void updateDCD(int, int);
+extern void Frame_Optimize(TAX25Port * AX25Sess, TStringList * buf);
+extern void RX2TX(int snd_ch);
+extern void KISS_on_data_out(int port, string * frame, int TX);
+
 /*
 
 unit ax25_demod;
@@ -309,6 +314,7 @@ float get_persist(int snd_ch, int persist)
 	return x1 * 0.5 * slottime[snd_ch];
 }
 
+
 void chk_dcd1(int snd_ch, int buf_size)
 {
 	// This seems to schedule all TX, but is only called when a frame has been processed
@@ -321,6 +327,8 @@ void chk_dcd1(int snd_ch, int buf_size)
 	boolean  ind_dcd;
 	boolean  dcd_sync;
 	longint  n;
+    UNUSED(ind_dcd);
+    UNUSED(dcd_sync);
 
 	TAX25Port * AX25Sess;
 
@@ -495,6 +503,7 @@ string * get_pkt_data(string * stream)
 	Byte  bit;
 	Byte  raw_bit;
 	Byte  sym;
+    UNUSED(raw_bit);
 
 	bits_cnt = 0;
 	bitstuff_cnt = 0;
@@ -659,6 +668,11 @@ void make_rx_frame(int snd_ch, int rcvr_nr, int emph, Byte last_nrzi_bit, string
 	int i, k, n;
 	unsigned char * raw;
 	unsigned char * raw1;
+    UNUSED(k);
+    UNUSED(n);
+    UNUSED(swap_i);
+    UNUSED(swap_k);
+    UNUSED(s);
 
 	struct TDetector_t * pDET = &DET[emph][rcvr_nr];
 
@@ -750,9 +764,9 @@ void make_rx_frame(int snd_ch, int rcvr_nr, int emph, Byte last_nrzi_bit, string
 		Add(&detect_list[snd_ch], data);
 
 		if (arq_mem)
-			stringAdd(xx, "MEM", 3);
+            stringAdd(xx, (UCHAR *)"MEM", 3);
 		else
-			stringAdd(xx, "", 0);
+            stringAdd(xx, (UCHAR *)"", 0);
 
 		return;
 
@@ -770,7 +784,7 @@ void make_rx_frame(int snd_ch, int rcvr_nr, int emph, Byte last_nrzi_bit, string
 	raw = raw_data->Data;
 	raw1 = raw_data1->Data;
 
-	for (i = 0; i < raw_len; i++)
+    for (i = 0; i < (int)raw_len; i++)
 	{
 		if (raw[i] != raw1[i])
 		{
@@ -810,7 +824,7 @@ void make_rx_frame(int snd_ch, int rcvr_nr, int emph, Byte last_nrzi_bit, string
 
 					Add(&detect_list_c[snd_ch], xx);
 					Add(&detect_list[snd_ch], data);
-					stringAdd(xx, "SINGLE", 3);
+                    stringAdd(xx, (UCHAR *)"SINGLE", 3);
 
 					pDET->rx_decoded = decodedSingle;
 					pDET->emph_decoded = 1; //SINGLE
@@ -942,6 +956,11 @@ procedure add_to_ARQ_FEC(buf: TStringList; data: string);
 
 void make_rx_frame_FEC(int snd_ch, int rcvr_nr, string * data, string * fec_data, word nErr)
 {
+    UNUSED(snd_ch);
+    UNUSED(rcvr_nr);
+    UNUSED(data);
+    UNUSED(fec_data);
+    UNUSED(nErr);
 }
 
 /*var
@@ -1014,6 +1033,9 @@ void  Mux3(int snd_ch, int rcvr_nr, int emph, float * src1, float * core, float 
 	int tap4;
 	int tap_cnt;
 	unsigned int ii, kk;
+    UNUSED(acc3);
+    UNUSED(ii);
+    UNUSED(kk);
 
 	float Preemphasis6, Preemphasis12, MUX3_osc, AGC;
 	float AFC_IZ1, AFC_QZ1, AFC_IZ2, AFC_QZ2;
@@ -1207,6 +1229,8 @@ void Mux3_PSK(int snd_ch, int rcvr_nr, int emph, float * src1, float * core, flo
 	float acc1, acc2, mag;
 	int tap4;
 	int prev_cnt, tap_cnt;
+    UNUSED(mag);
+    UNUSED(prev_cnt);
 
 	float Preemphasis6, Preemphasis12, MUX3_osc;
 
@@ -1328,6 +1352,11 @@ void decode_stream_MPSK(int snd_ch, int rcvr_nr, float *  src, int buf_size, int
 {
 
 #ifndef WIN32
+    UNUSED(snd_ch);
+    UNUSED(rcvr_nr);
+    UNUSED(src);
+    UNUSED(buf_size);
+    UNUSED(last);
 
 	// Until ASM is converted
 
@@ -2005,7 +2034,7 @@ void  make_rx_frame_FX25(int snd_ch, int rcvr_nr, int emph, string * data)
 			Add(&detect_list_c[snd_ch], xx);
 			Add(&detect_list[snd_ch], data);
 
-			stringAdd(xx, "", 0);
+            stringAdd(xx, (UCHAR *)"", 0);
 		}
 		else
 		{
@@ -2029,24 +2058,27 @@ void  make_rx_frame_FX25(int snd_ch, int rcvr_nr, int emph, string * data)
 
 }
 
-	
+int fx25_decode_rs(Byte * data, int * eras_pos, int no_eras, int pad, int rs_size);
+
 string * decode_FX25_data(TFX25 fx25)
 {
 	integer eras_pos = 0, i, j, len, rs_res;
 	Byte a, k;
-	Byte bit, byte_rx, bit_stuff_cnt, bit_cnt = 0, frame_status, bit_stream;
+    Byte bit, byte_rx = 0, bit_stuff_cnt, bit_cnt = 0, frame_status, bit_stream;
+    UNUSED(i);
+    UNUSED(j);
 
 	string * data = newString();
 
-	int done;
+    int done = 0;
 	Byte rs_block[256];
 	int RSOK;
 
 	bit_stream = 0;
 	len = fx25.size - fx25.rs_size;
 	frame_status = FRAME_WAIT;
-
-	done = 0;
+    UNUSED(done);
+    UNUSED(RSOK);
 
 	// RS FEC
 
@@ -2173,7 +2205,7 @@ unsigned char get_corr(unsigned long long val)
 
 		v = v - ((v >> 1) & 0x55555555);                    // reuse input as temporary
 		v = (v & 0x33333333) + ((v >> 2) & 0x33333333);     // temp
-		errors = ((v + (v >> 4) & 0xF0F0F0F) * 0x1010101) >> 24; // count
+        errors = (((v + (v >> 4)) & 0xF0F0F0F) * 0x1010101) >> 24; // count
 
 		if (errors > tt)
 		{
@@ -2185,7 +2217,7 @@ unsigned char get_corr(unsigned long long val)
 
 		v = v - ((v >> 1) & 0x55555555);                    // reuse input as temporary
 		v = (v & 0x33333333) + ((v >> 2) & 0x33333333);     // temp
-		errors += ((v + (v >> 4) & 0xF0F0F0F) * 0x1010101) >> 24; // count
+        errors += (((v + (v >> 4)) & 0xF0F0F0F) * 0x1010101) >> 24; // count
 
 		if (errors <= tt)
 			return i;
@@ -2199,7 +2231,11 @@ unsigned char get_corr(unsigned long long val)
 
 void decode_stream_FSK(int last, int snd_ch, int rcvr_nr, int emph, float * src_buf, float * bit_buf, int  buf_size, string * data)
 {
-	int i, k, j, n;
+    UNUSED(data);
+    int i, k, j, n;
+    UNUSED(i);
+    UNUSED(n);
+    UNUSED(j);
 	UCHAR bit;
 	UCHAR raw_bit;
 	UCHAR raw_bit1;
@@ -2575,17 +2611,17 @@ void decode_stream_FSK(int last, int snd_ch, int rcvr_nr, int emph, float * src_
 				if (pDET->raw_bits[snd_ch].Length < 36873)
 				{
 					if (raw_bit == RX_BIT1)
-						stringAdd(&pDET->raw_bits[snd_ch], "1", 1);
+                        stringAdd(&pDET->raw_bits[snd_ch], (UCHAR *)"1", 1);
 					else
-						stringAdd(&pDET->raw_bits[snd_ch], "0", 1);
+                        stringAdd(&pDET->raw_bits[snd_ch], (UCHAR *)"0", 1);
 				}
 
 				if (pDET->raw_bits1[snd_ch].Length < 36873)
 				{
 					if (raw_bit1 == RX_BIT1)
-						stringAdd(&pDET->raw_bits1[snd_ch], "1", 1);
+                        stringAdd(&pDET->raw_bits1[snd_ch], (UCHAR *)"1", 1);
 					else
-						stringAdd(&pDET->raw_bits1[snd_ch], "0", 1);
+                        stringAdd(&pDET->raw_bits1[snd_ch], (UCHAR *)"0", 1);
 				}
 				//
 			}
@@ -2629,19 +2665,26 @@ void decode_stream_BPSK(int last, int snd_ch, int rcvr_nr, int emph, float * src
 	float agc_slow1 = 1 - agc_slow;
 
 	int i, k, j, n;
+    UNUSED(i);
+    UNUSED(j);
+    UNUSED(n);
 	Byte dibit, bit;
+    UNUSED(dibit);
 	single afc, x, amp, k1, k2;
 	single baudrate;
 	single div_bit_afc;
 	word max_cnt;
 	single threshold;
+    UNUSED(threshold);
 	single tr;
 	single KCorr, AngleCorr, angle, muxI1, muxQ1, muxI2, muxQ2, sumIQ1, sumIQ2;
+    UNUSED(KCorr);
 	Byte newpkpos, sample_cnt;
 	single PkAmpI, PkAmpQ, PkAmpMax, PSK_AGC;
 	single PSK_IZ1, PSK_QZ1;
 	single bit_osc;
 	Byte bit_stuff_cnt, last_rx_bit, frame_status, bit_cnt, bit_stream, byte_rx;
+    UNUSED(last_rx_bit);
 
 	// get saved values to local variables to speed up access
 
@@ -2900,12 +2943,15 @@ void decode_stream_QPSK(int last, int snd_ch, int rcvr_nr, int emph, float * src
 	float agc_slow1 = 1 - agc_slow;
 
 	int i, k, j, n;
+    UNUSED(i);
+    UNUSED(n);
 	Byte dibit = 0, bit;
 	single afc, x, amp, k1, k2;
 	single baudrate;
 	single div_bit_afc;
 	word max_cnt;
 	single threshold;
+    UNUSED(threshold);
 	single tr;
 	single KCorr = 0, AngleCorr, angle, muxI1, muxQ1, muxI2, muxQ2, sumIQ1, sumIQ2;
 	Byte newpkpos, sample_cnt;
@@ -3250,12 +3296,14 @@ void decode_stream_8PSK(int last, int snd_ch, int rcvr_nr, int emph, float * src
 	float agc_slow1 = 1 - agc_slow;
 
 	int i, k, j, n;
+    UNUSED(n);
 	Byte tribit = 0, bit;
 	single afc, x, amp, k1, k2;
 	single baudrate;
 	single div_bit_afc;
 	word max_cnt;
 	single threshold;
+    UNUSED(threshold);
 	single tr;
 	single KCorr = 0, AngleCorr, angle, muxI1, muxQ1, muxI2, muxQ2, sumIQ1, sumIQ2;
 	Byte newpkpos, sample_cnt;
@@ -3355,7 +3403,7 @@ void decode_stream_8PSK(int last, int snd_ch, int rcvr_nr, int emph, float * src
 			if (last)
 			{
 				DCD_LastPkPos[snd_ch] = DCD_LastPkPos[snd_ch] * 0.96 + newpkpos * 0.04;
-				DCD_LastPerc[snd_ch] = DCD_LastPerc[snd_ch] * 0.96 + abs(newpkpos - DCD_LastPkPos[snd_ch])*0.04;
+                DCD_LastPerc[snd_ch] = DCD_LastPerc[snd_ch] * 0.96 + fabsf(newpkpos - DCD_LastPkPos[snd_ch])*0.04;
 				if (DCD_LastPerc[snd_ch] >= tr || DCD_LastPerc[snd_ch] < 0.00001)
 					dcd_bit_cnt[snd_ch] = dcd_bit_cnt[snd_ch] + 1;
 				else
@@ -4030,16 +4078,23 @@ void PSK8_Demodulator(int snd_ch, int rcvr_nr, int emph, boolean last)
 			&DET[emph][rcvr_nr].rx_data[snd_ch]);
 }
 
+extern void analiz_frame(int snd_ch, string * frame, char * code, boolean fecflag);
+extern void CreateStringList(TStringList * List);
 
 void Demodulator(int snd_ch, int rcvr_nr, float * src_buf, int last, int xcenter)
 {
+    UNUSED(xcenter);
 	// called once per decoder (current one in rcvr_nr)
 
 	int i, k;
+    UNUSED(i);
+    UNUSED(k);
 	string rec_code;
+    UNUSED(rec_code);
 	UCHAR emph;
 	int found;
 	string * s_emph;
+    UNUSED(s_emph);
 	struct TDetector_t * pDET = &DET[0][rcvr_nr];
 
 	// looks like this filters to src_BPF_buf
@@ -4121,7 +4176,7 @@ void Demodulator(int snd_ch, int rcvr_nr, float * src_buf, int last, int xcenter
 	{
 		boolean fecflag = 0;
 		char indicators[5] = "-$#F+"; // None, Single, MEM, FEC, Normal
-
+        UNUSED(indicators);
 		// Work out which decoder and which emph settings worked. 
 
 		if (detect_list[snd_ch].Count > 0)		// no point if nothing decoded
@@ -4137,6 +4192,7 @@ void Demodulator(int snd_ch, int rcvr_nr, float * src_buf, int last, int xcenter
 			struct TDetector_t * pDET;
 			int i = 0, j;
 			int maxemph = nr_emph;
+            UNUSED(maxemph);
 
 			for (i = 0; i <= nr_emph; i++)
 			{
@@ -4161,7 +4217,7 @@ void Demodulator(int snd_ch, int rcvr_nr, float * src_buf, int last, int xcenter
 			decoded[j] = 0;
 
 			for (j--; j >= 0; j--)
-				decoded[j] = indicators[decoded[j]];
+                decoded[j] = indicators[(int)decoded[j]];
 
 			if (emph_all[snd_ch])
 			{

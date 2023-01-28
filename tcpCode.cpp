@@ -370,12 +370,9 @@ void mynet::doHLSetPTT(int c)
 
 	QByteArray datas = HAMLIBsock->readAll();
 
-	qDebug(datas.data());
+    qDebug("%s", datas.data());
 
 }
-
-
-
 
 
 extern "C" void KISSSendtoServer(void * sock, Byte * Msg, int Len)
@@ -578,7 +575,7 @@ void  mynet::socketError()
 
 extern "C" void sendSamplestoStdout(short * Samples, int nSamples)
 {
-
+    UNUSED(Samples); UNUSED(nSamples);
 }
 
 

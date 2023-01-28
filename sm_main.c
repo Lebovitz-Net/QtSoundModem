@@ -28,6 +28,15 @@ void make_core_TXBPF(UCHAR snd_ch, float freq, float width);
 void make_core_INTR(UCHAR snd_ch);
 void make_core_LPF(UCHAR snd_ch, short width);
 void wf_pointer(int snd_ch);
+void Demodulator(int snd_ch, int rcvr_nr, float * src_buf, int last, int xcenter);
+void sendSamplestoUDP(short * Samples, int nSamples, int Port);
+void ARDOPProcessNewSamples(short * Samples, int nSamples);
+void doWaterfall(int snd_chan);
+void timer_event();
+void get_monitor_path(Byte * path, char * mycall, char * corrcall, char * digi);
+void decode_frame(Byte * frame, int len, Byte * path, string * data,
+    Byte * pid, Byte * nr, Byte * ns, Byte * f_type, Byte * f_id,
+    Byte *  rpt, Byte * pf, Byte * cr);
 
 char modes_name[modes_count][20] = 
 {
@@ -1673,8 +1682,9 @@ uintptr_t _beginthread(void(__cdecl *start_address)(void *), unsigned stack_size
 pthread_t _beginthread(void(*start_address)(void *), unsigned stack_size, void * arglist)
 {
 	pthread_t thread;
+    UNUSED(stack_size);
 
-	if (pthread_create(&thread, NULL, (void * (*)(void *))start_address, (void*)arglist) != 0)
+    if (pthread_create(&thread, NULL, (void * (*)(void *))&start_address, (void*)arglist) != 0)
 		perror("New Thread");
 
 	return thread;
@@ -1714,10 +1724,10 @@ void runModems()
 		if (thread[2]) WaitForSingleObject(&thread[2], 2000);
 		if (thread[3]) WaitForSingleObject(&thread[3], 2000);
 #else
-		if (thread[0]) pthread_join(thread[0], &res);
-		if (thread[1]) pthread_join(thread[1], &res);
-		if (thread[2]) pthread_join(thread[2], &res);
-		if (thread[3]) pthread_join(thread[3], &res);
+        if (thread[0]) pthread_join(thread[0], (void *)&res);
+        if (thread[1]) pthread_join(thread[1], (void *)&res);
+        if (thread[2]) pthread_join(thread[2], (void *)&res);
+        if (thread[3]) pthread_join(thread[3], (void *)&res);
 #endif
 	}
 }
@@ -1750,7 +1760,7 @@ void runModemthread(void * param)
 void BufferFull(short * Samples, int nSamples)			// These are Stereo Samples
 {
 	word i, i1;
-	Byte snd_ch, rcvr_idx;
+    Byte snd_ch, rcvr_idx; UNUSED(rcvr_idx);
 	boolean add_fft_line;
 	int buf_offset;
 
@@ -2011,25 +2021,25 @@ char * frame_monitor(string * frame, char * code, int tx_stat)
 {
 	char mon_frm[512];
 	char AGW_path[256];
-	string * AGW_data;
+    string * AGW_data; UNUSED(AGW_data);
 
-	const Byte * frm = "???";
+    const Byte * frm = (Byte *)"???";
 	Byte * datap;
 	Byte _data[512] = "";
 	Byte * p_data = _data;
 	int _datalen;
 
-	char  agw_port;
+    char  agw_port; UNUSED(agw_port);
 	char  CallFrom[10], CallTo[10], Digi[80];
 
 	char TR = 'R';
 	char codestr[16] = "";
 
 	integer i;
-	char  time_now[32];
+    char  time_now[32]; UNUSED(time_now);
 	int len;
 
-	AGWUser * AGW;
+    AGWUser * AGW; UNUSED(AGW);
 
 	Byte pid, nr, ns, f_type, f_id;
 	Byte  rpt, cr, pf;
@@ -2117,62 +2127,62 @@ char * frame_monitor(string * frame, char * code, int tx_stat)
 	{
 	case I_I:
 
-		frm = "I";
+        frm = (UCHAR *)"I";
 		break;
 
 	case S_RR:
 
-		frm = "RR";
+        frm = (UCHAR *)"RR";
 		break;
 
 	case S_RNR:
 
-		frm = "RNR";
+        frm = (UCHAR *)"RNR";
 		break;
 
 	case S_REJ:
 
-		frm = "REJ";
+        frm = (UCHAR *)"REJ";
 		break;
 
 	case S_SREJ:
 
-		frm = "SREJ";
+        frm = (UCHAR *)"SREJ";
 		break;
 
 	case U_SABM:
 
-		frm = "SABM";
+        frm = (UCHAR *)"SABM";
 		break;
 
 	case SABME:
 
-		frm = "SABME";
+        frm = (UCHAR *)"SABME";
 		break;
 
 	case U_DISC:
 
-		frm = "DISC";
+        frm = (UCHAR *)"DISC";
 		break;
 
 	case U_DM:
 
-		frm = "DM";
+        frm = (UCHAR *)"DM";
 		break;
 
 	case U_UA:
 
-		frm = "UA";
+        frm = (UCHAR *)"UA";
 		break;
 
 	case U_FRMR:
 
-		frm = "FRMR";
+        frm = (UCHAR *)"FRMR";
 		break;
 
 	case U_UI:
 
-		frm = "UI";
+        frm = (UCHAR *)"UI";
 	}
 	
 	if (Digi[0])

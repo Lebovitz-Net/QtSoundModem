@@ -27,6 +27,7 @@ along with QtSoundModem.  If not, see http://www.gnu.org/licenses
 #include "hidapi.h"
 #include <fcntl.h>
 #include <errno.h>
+#include <unistd.h>
 
 BOOL KISSServ;
 int KISSPort;
@@ -43,13 +44,20 @@ int Capturing = 0;
 extern unsigned short buffer[2][1200];
 extern int SoundMode;
 
-extern short * DMABuffer;
+extern unsigned short * DMABuffer;
 
+#define HANDLE int
+
+HANDLE OpenCOMPort(char * Port, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet, int Stopbits);
 unsigned short * SendtoCard(unsigned short * buf, int n);
 short * SoundInit();
 void DoTX(int Chan);
 void UDPPollReceivedSamples();
-
+void HAMLIBSetPTT(int PTTState);
+BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
+void COMSetDTR(HANDLE fd);
+void COMSetRTS(HANDLE fd);
+void analiz_frame(int snd_ch, string * frame, char * code, boolean fecflag);
 
 extern int SampleNo;
 
@@ -106,6 +114,13 @@ void freefft()
 }
 
 int nonGUIMode = 0;
+
+void platformInit();
+void RsCreate();
+void detector_init();
+void KISS_init();
+void ax25_init();
+void init_raduga();
 
 void soundMain()
 {
@@ -170,7 +185,7 @@ void SampleSink(int LR, short Sample)
 		{
 			// send this buffer to sound interface
 
-			DMABuffer = SendtoCard(DMABuffer, SendSize);
+            DMABuffer = SendtoCard(DMABuffer, SendSize);
 			Number = 0;
 		}
 	
@@ -183,6 +198,7 @@ void SampleSink(int LR, short Sample)
 	SampleNo++;
 }
 
+void SoundFlush(int num);
 
 void Flush()
 {
@@ -320,7 +336,7 @@ extern UCHAR * pixelPointer;
 #endif
 
 extern int blnBusyStatus;
-BusyDet = 0;
+int BusyDet = 0;
 
 #define PLOTWATERFALL
 
@@ -512,6 +528,10 @@ void UpdateBusyDetector(short * bytNewSamples)
 extern short rawSamples[2400];	// Get Frame Type need 2400 and we may add 1200
 int rawSamplesLength = 0;
 extern int maxrawSamplesLength;
+void BufferFull(short * Samples, int nSamples);
+void wf_pointer(int snd_ch);
+void PollReceivedSamples();
+void chk_dcd1(int snd_ch, int buf_size);
 
 void ProcessNewSamples(short * Samples, int nSamples)
 {
@@ -593,12 +613,18 @@ void MainLoop()
 
 }
 
+void make_core_BPF(UCHAR snd_ch, short freq, short width);
+void modulator(UCHAR snd_ch, int buf_size);
+void sendAckModeAcks(int snd_ch);
+void PktARDOPEncode(UCHAR * Data, int Len, int Chan);
+int stricmp(const unsigned char * pStr1, const unsigned char *pStr2);
+
 int ARDOPSendToCard(int Chan, int Len)
 {
 	// Send Next Block of samples to the soundcard
 
-	short * in = &ARDOPTXBuffer[Chan][ARDOPTXPtr[Chan]];		// Enough to hold whole frame of samples
-	short * out = DMABuffer;
+    unsigned short * in = &ARDOPTXBuffer[Chan][ARDOPTXPtr[Chan]];		// Enough to hold whole frame of samples
+    unsigned short * out = DMABuffer;
 
 	int LR = modemtoSoundLR[Chan];
 
@@ -988,7 +1014,7 @@ void OpenPTTPort()
 			char c;
 			int val;
 
-			while (c = *(ptr1++))
+            while ((c = *(ptr1++)))
 			{
 				val = c - 0x30;
 				if (val > 15) val -= 7;
@@ -1004,7 +1030,7 @@ void OpenPTTPort()
 			ptr1 = PTTOnString;
 			ptr2 = PTTOnCmd;
 
-			while (c = *(ptr1++))
+            while ((c = *(ptr1++)))
 			{
 				val = c - 0x30;
 				if (val > 15) val -= 7;
@@ -1018,7 +1044,7 @@ void OpenPTTPort()
 			PTTOnCmdLen = ptr2 - PTTOnCmd;
 		}
 
-		if (stricmp(PTTPort, "GPIO") == 0)
+        if (stricmp((UCHAR *)PTTPort, (UCHAR *)"GPIO") == 0)
 		{
 			// Initialise GPIO for PTT if available
 
@@ -1039,13 +1065,13 @@ void OpenPTTPort()
 #endif
 
 		}
-		else if (stricmp(PTTPort, "CM108") == 0)
+        else if (stricmp((UCHAR *)PTTPort, (UCHAR *)"CM108") == 0)
 		{
 			DecodeCM108(CM108Addr);
 			PTTMode |= PTTCM108;
 		}
 
-		else if (stricmp(PTTPort, "HAMLIB") == 0)
+        else if (stricmp((UCHAR *)PTTPort, (UCHAR *)"HAMLIB") == 0)
 		{
 			PTTMode |= PTTHAMLIB;
 			HAMLIBSetPTT(0);			// to open port
@@ -1067,7 +1093,7 @@ void ClosePTTPort()
 void CM108_set_ptt(int PTTState)
 {
 	char io[5];
-	hid_device *handle;
+    hid_device *handle; UNUSED(handle);
 	int n;
 
 	io[0] = 0;
@@ -1160,9 +1186,9 @@ void RadioPTT(int snd_ch, BOOL PTTState)
 	if ((PTTMode & PTTCAT))
 	{
 		if (PTTState)
-			WriteCOMBlock(hPTTDevice, PTTOnCmd, PTTOnCmdLen);
+            WriteCOMBlock(hPTTDevice, (char *)PTTOnCmd, PTTOnCmdLen);
 		else
-			WriteCOMBlock(hPTTDevice, PTTOffCmd, PTTOffCmdLen);
+            WriteCOMBlock(hPTTDevice, (char *)PTTOffCmd, PTTOffCmdLen);
 
 		return;
 	}

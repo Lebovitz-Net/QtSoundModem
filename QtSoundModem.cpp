@@ -244,7 +244,7 @@ void QtSoundModem::resizeEvent(QResizeEvent* event)
 
 	QRect r = geometry();
 
-	int A, B, C, W;
+    int A, B = 0, C, W;
 	int modemBoxHeight = 30;
 
 
@@ -2451,7 +2451,7 @@ void QtSoundModem::show_grid()
 
 	int  snd_ch, i, num_rows, row_idx;
 	QTableWidgetItem *item;
-	const char * msg;
+    const char * msg = 0;
 
 	int  speed_tx, speed_rx;
 

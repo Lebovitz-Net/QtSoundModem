@@ -49,6 +49,29 @@ implementation
 
 uses ax25,ax25_agw,sm_main,kiss_mode;
 */
+extern void ax25_info_init(TAX25Port * AX25Sess);
+extern void  clr_frm_win(TAX25Port * AX25Sess);
+extern void decode_frame(Byte * frame, int len, Byte * path, string * data,
+    Byte * pid, Byte * nr, Byte * ns, Byte * f_type, Byte * f_id,
+    Byte *  rpt, Byte * pf, Byte * cr);
+extern void AGW_AX25_data_in(void  * socket, int snd_ch, int PID, Byte * path, string * data);
+extern void AGW_AX25_conn(TAX25Port * AX25Sess, int snd_ch, Byte mode);
+
+int number_digi(UCHAR * path)
+{
+    int n = 0;
+
+    //  a_path: array [0..ADDR_MAX_LEN-3] of string;
+    int i;
+    UNUSED(path);
+    UNUSED(i);
+
+    // for i:=0 to ADDR_MAX_LEN-3 do a_path[i]:='';
+    // try explode(a_path,',',path,ADDR_MAX_LEN-2); except end;
+    // for i:=0 to ADDR_MAX_LEN-3 do if a_path[i]<>'' then inc(n);
+
+    return n;
+}
 
 string * make_frame(string * data, Byte * path, Byte  pid, Byte nr, Byte ns, Byte f_type, Byte f_id, boolean rpt, boolean pf, boolean cr);
 void rst_t3(TAX25Port * AX25Sess);
@@ -208,8 +231,8 @@ void Frame_Optimize(TAX25Port * AX25Sess, TStringList * buf)
 
 		while (k != AX25Sess->vs)
 		{
-			need_frm[index++] = k + 'A';
-			k = (++k) & 7;
+            need_frm[index++] = k++ + 'A';
+            k = k & 7; // moved the ++k to above line. Compiler doesn't guarrantee the order of changes to k
 		}
 
 		optimize = TRUE;
@@ -279,6 +302,7 @@ void  add_pkt_buf(TAX25Port * AX25Sess, string * data)
 {
 	boolean found = 0;
 	string * frm;
+    UNUSED(frm);
 	int i = 0;
 
 	while (i < AX25Sess->frame_buf.Count && !found)
@@ -294,7 +318,8 @@ void  add_pkt_buf(TAX25Port * AX25Sess, string * data)
 
 void add_I_FRM(TAX25Port * AX25Sess, Byte * path)
 {
-	string * data;
+    UNUSED(path);
+    string * data;
 	int  i;
 
 	upd_i_lo(AX25Sess, AX25Sess->vs);
@@ -341,7 +366,8 @@ void  delete_I_FRM(TAX25Port * AX25Sess, int  nr)
 void delete_I_FRM_port(TAX25Port * AX25Sess)
 {
 	string * frame;
-	string path = { 0 }; 
+    //string path = { 0 };
+    Byte path[120];
 	string data= { 0 };
 
 	Byte pid, nr, ns, f_type, f_id, rpt, cr, pf;
@@ -353,7 +379,7 @@ void delete_I_FRM_port(TAX25Port * AX25Sess)
 		optimize = TRUE;
 		frame = Strings(&AX25Sess->frame_buf, i);
 
-		decode_frame(frame->Data, frame->Length, &path, &data, &pid, &nr, &ns, &f_type, &f_id, &rpt, &pf, &cr);
+        decode_frame(frame->Data, frame->Length, path, &data, &pid, &nr, &ns, &f_type, &f_id, &rpt, &pf, &cr);
 
 		if (f_id == I_I)
 		{
@@ -491,8 +517,8 @@ void  write_frame_collector(TAX25Port * AX25Sess, int ns, string * data)
 	i = 1;
 	do
 	{
-		if (ns == (AX25Sess->vr + i) & 7)
-			need_frm = TRUE;
+        if (ns == ((AX25Sess->vr + i) & 7))
+            need_frm = TRUE;
 
 		i++;
 
@@ -523,7 +549,7 @@ void  write_frame_collector(TAX25Port * AX25Sess, int ns, string * data)
 		{
 			string * frm = newString();
 
-			stringAdd(frm, (char *)&frm_ns, 1);
+            stringAdd(frm, (UCHAR *)&frm_ns, 1);
 			stringAdd(frm, data->Data, data->Length);
 			Add(&AX25Sess->frm_collector, frm);
 		}
@@ -539,6 +565,7 @@ string * read_frame_collector(TAX25Port * AX25Sess, boolean fecflag)
 
 	int i = 0;
 	boolean found = FALSE;
+    UNUSED(found);
 	Byte frm_ns;
 
 	while (i < AX25Sess->frm_collector.Count)
@@ -644,6 +671,7 @@ void set_try_unlink(TAX25Port * AX25Sess, Byte * path)
 	inc_frack(AX25Sess);
 }
 
+ void AGW_AX25_disc(TAX25Port * AX25Sess, Byte mode);
 
 void set_unlink(TAX25Port * AX25Sess, Byte * path)
 {
@@ -689,7 +717,7 @@ void set_FRMR(int snd_ch, Byte * path, unsigned char frameType)
 	Data->Data[2] = 1;			// Invalid CTL Byte
 	Data->Length = 3;
 
-	reverse_addr(path, revpath, strlen(path));
+    reverse_addr(path, revpath, strlen((const char *)path));
 
 	add_pkt_buf(&AX25Port[snd_ch][0], make_frame(Data, revpath, 0, 0, 0, U_FRM, U_FRMR, FALSE, SET_P, SET_R));
 
@@ -702,7 +730,7 @@ void set_DM(int snd_ch, Byte * path)
 	
 	Byte revpath[80];
 
-	reverse_addr(path, revpath, strlen(path));
+    reverse_addr(path, revpath, strlen((const char *)path));
 
 	add_pkt_buf(&AX25Port[snd_ch][0], make_frame(NULL, revpath, 0, 0, 0, U_FRM,U_DM,FALSE,SET_P,SET_R));
 }
@@ -738,7 +766,8 @@ void on_RR(TAX25Port * AX25Sess, Byte * path, int  nr, int  pf, int cr)
 //		Debugprintf("RR Rxed vs = %d hi_vs = %d", AX25Sess->vs, AX25Sess->hi_vs);
 		while (i != AX25Sess->hi_vs)
 		{
-			i = (i++) & 7;
+            i++;
+            i = i & 7;
 			need_frame[index++] = i + '0';
 			if (index > 10)
 			{
@@ -754,7 +783,7 @@ void on_RR(TAX25Port * AX25Sess, Byte * path, int  nr, int  pf, int cr)
 
 		// We restore the link if the number is valid
 
-		if (AX25Sess->status == STAT_CHK_LINK || strchr(need_frame, nr + '0') > 0)
+        if (AX25Sess->status == STAT_CHK_LINK || (strchr(need_frame, nr + '0') > (char *)0))
 		{
 			rst_timer(AX25Sess);
 			AX25Sess->status = STAT_LINK;
@@ -771,6 +800,7 @@ void on_RR(TAX25Port * AX25Sess, Byte * path, int  nr, int  pf, int cr)
 
 void on_RNR(TAX25Port * AX25Sess, Byte * path, int  nr, int  pf, int cr)
 {
+    UNUSED(pf);
 	if (AX25Sess->status == STAT_TRY_LINK)
 		return;
 
@@ -801,6 +831,7 @@ void on_RNR(TAX25Port * AX25Sess, Byte * path, int  nr, int  pf, int cr)
 
 void on_REJ(TAX25Port * AX25Sess, Byte * path, int  nr, int  pf, int cr)
 {
+    UNUSED(pf);
 	if (AX25Sess->status == STAT_TRY_LINK)
 		return;
 
@@ -827,6 +858,7 @@ void on_REJ(TAX25Port * AX25Sess, Byte * path, int  nr, int  pf, int cr)
 
 void on_SREJ(TAX25Port * AX25Sess, Byte * path, int  nr, int  pf, int cr)
 {
+    UNUSED(pf);
 	if (AX25Sess->status == STAT_TRY_LINK)
 		return;
 
@@ -853,6 +885,7 @@ void on_SREJ(TAX25Port * AX25Sess, Byte * path, int  nr, int  pf, int cr)
 
 void  on_I(void * socket, TAX25Port * AX25Sess, int PID, Byte * path, string * data, int nr, int ns, int pf, int cr, boolean fecflag)
 {
+    UNUSED(pf); UNUSED(cr);
 	string * collector_data;
 	int i;
 	Byte need_frame[16] = "";
@@ -883,7 +916,7 @@ void  on_I(void * socket, TAX25Port * AX25Sess, int PID, Byte * path, string * d
 	
 		while (i != AX25Sess->hi_vs)
 		{
-			i = (i++) & 7;
+            i++; i = i & 7;
 			need_frame[index++] = i + '0';
 			if (index > 10)
 			{
@@ -899,7 +932,7 @@ void  on_I(void * socket, TAX25Port * AX25Sess, int PID, Byte * path, string * d
 
 		//We restore the link if the number is valid
 
-		if (AX25Sess->status == STAT_CHK_LINK || strchr(need_frame, nr + '0') > 0)
+        if (AX25Sess->status == STAT_CHK_LINK || (strchr((const char *)need_frame, nr + '0') > (char *)0))
 		{
 			//We restore the link if the number is valid
 
@@ -1010,6 +1043,7 @@ void  on_SABM(void * socket, TAX25Port * AX25Sess)
 
 void on_DISC(void * socket, TAX25Port * AX25Sess)
 {
+    UNUSED(socket);
 	if (AX25Sess->status != STAT_NO_LINK)
 	{
 		AX25Sess->info.stat_end_ses = time(NULL);
@@ -1031,6 +1065,7 @@ void on_DISC(void * socket, TAX25Port * AX25Sess)
 
 void on_DM(void * socket, TAX25Port * AX25Sess)
 {
+    UNUSED(socket);
 	if (AX25Sess->status != STAT_NO_LINK)
 	{
 		AX25Sess->info.stat_end_ses = time(NULL);
@@ -1049,6 +1084,7 @@ void on_DM(void * socket, TAX25Port * AX25Sess)
 
 void on_UA(void *socket, TAX25Port * AX25Sess)
 {
+    UNUSED(socket);
 	switch (AX25Sess->status)
 	{
 	case STAT_TRY_LINK:
@@ -1077,15 +1113,18 @@ void on_UA(void *socket, TAX25Port * AX25Sess)
 
 void on_UI(TAX25Port * AX25Sess, int pf, int cr)
 {
+    UNUSED(AX25Sess); UNUSED(pf); UNUSED(cr);
 }
 
 void on_FRMR(void * socket, TAX25Port * AX25Sess, Byte * path)
 {
+    UNUSED(socket);
 	if (AX25Sess->status != STAT_NO_LINK)
 	{
 		AX25Sess->info.stat_end_ses = time(NULL);
 
-		AGW_AX25_disc(socket, AX25Sess->snd_ch, MODE_OTHER, path);
+        //AGW_AX25_disc(socket, AX25Sess->snd_ch, MODE_OTHER, path);
+        AGW_AX25_disc(AX25Sess, MODE_OTHER);
 		write_ax25_info(AX25Sess);
 	}
 
@@ -1116,6 +1155,7 @@ void timer_event()
 {
 	int  snd_ch, port;
 	void * socket;
+    UNUSED(socket);
 	single  frack;
 	Byte  active;
 	TAX25Port * AX25Sess;
@@ -1211,7 +1251,7 @@ void timer_event()
 TAX25Port * get_free_port(int snd_ch)
 {
 	int i;
-	int need_free_port;
+    int need_free_port; UNUSED(need_free_port);
 
 	i = 0;
 	
@@ -1234,7 +1274,7 @@ TAX25Port * get_user_port(int snd_ch, Byte * path)
 	TAX25Port * AX25Sess = NULL;
 
 	int i = 0;
-	int port = 0;
+    int port = 0; UNUSED(port);
 
 
 	while (i < port_num)
@@ -1300,7 +1340,8 @@ void * get_sock_by_port(TAX25Port * AX25Sess)
 
 void Digipeater(int snd_ch, string * frame)
 {
-	boolean addr_end, flag_replaced, digi_stop;
+    boolean addr_end, flag_replaced, digi_stop;
+    UNUSED(digi_stop); UNUSED(addr_end); UNUSED(flag_replaced);
 	word crc;
 	char call[16];
 	Byte * addr = &frame->Data[7];					// Origon
@@ -1368,17 +1409,21 @@ void Digipeater(int snd_ch, string * frame)
 	}
 }
 
+extern void KISS_on_data_out(int port, string * frame, int TX);
+extern boolean is_correct_path(Byte * path, Byte pid);
+extern boolean is_last_digi(Byte *path);
+
 void analiz_frame(int snd_ch, string * frame, char * code, boolean fecflag)
 {
-	int  port, free_port;
+    int  port, free_port; UNUSED(port); UNUSED(free_port);
 	Byte path[80];
 	string  *data = newString();
 	Byte  pid, nr, ns, f_type, f_id, rpt, cr, pf;
-	boolean	need_free_port;
+    boolean	need_free_port; UNUSED(need_free_port);
 	void * socket = NULL;
-	boolean	incoming_conn = 0;
-	Byte revpath[80];
-	int pathlen;
+    boolean	incoming_conn = 0; UNUSED(incoming_conn);
+    Byte revpath[80]; UNUSED(revpath);
+    int pathlen; UNUSED(pathlen);
 	Byte * ptr;
 
 	int excluded = 0;
@@ -1513,7 +1558,7 @@ void analiz_frame(int snd_ch, string * frame, char * code, boolean fecflag)
 
 			Byte Rev[80];
 
-			reverse_addr(path, Rev, strlen(path));
+            reverse_addr(path, Rev, strlen((const char *)path));
 			set_DM(snd_ch, Rev);
 			return;
 		}
@@ -1535,9 +1580,9 @@ void analiz_frame(int snd_ch, string * frame, char * code, boolean fecflag)
 
 		// I think we need to reverse the path
 
-		AX25Sess->pathLen = strlen(path);
-		strcpy(AX25Sess->ReversePath, path);
-		reverse_addr(path, AX25Sess->Path, strlen(path));
+        AX25Sess->pathLen = strlen((const char *)path);
+        strcpy((char *)AX25Sess->ReversePath, (char *)path);
+        reverse_addr(path, AX25Sess->Path, strlen((const char *)path));
 	}
 
 	// we process a packet on the necessary port

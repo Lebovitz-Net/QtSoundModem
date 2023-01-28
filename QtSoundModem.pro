@@ -11,6 +11,7 @@ TEMPLATE = app
 
 HEADERS += ./UZ7HOStuff.h \
     ./QtSoundModem.h \
+    ./ARDOPC.h \
     ./tcpCode.h
 
 SOURCES += ./audio.c \

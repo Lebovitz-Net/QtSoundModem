@@ -10,6 +10,8 @@
 #define closesocket close
 #endif
 
+#define UNUSED(x) (void)(x)
+
 //#include "Version.h"
 
 #include "ARDOPC.h"
@@ -643,7 +645,7 @@ void testRS()
 {
 	// feed random data into RS to check robustness
 
-	BOOL blnRSOK, FrameOK;
+    BOOL blnRSOK, FrameOK; UNUSED(FrameOK);
 	char bytRawData[256];
 	int DataLen = 128;
 	int intRSLen = 64;
@@ -654,12 +656,13 @@ void testRS()
 		bytRawData[i] = rand() % 256;
 	}
 
-	FrameOK = RSDecode(bytRawData, DataLen, intRSLen, &blnRSOK);
+    FrameOK = RSDecode((UCHAR *)bytRawData, DataLen, intRSLen, &blnRSOK);
 }
 
 
 void SendCWID(char * Callsign, BOOL x)
 {
+    UNUSED(Callsign); UNUSED(x);
 }
 
 // Subroutine to generate 1 symbol of leader
@@ -1221,7 +1224,7 @@ BOOL xRSDecode(UCHAR * bytRcv, int Length, int CheckLen, BOOL * blnRSOK)
 
 void SendID(BOOL blnEnableCWID)
 {
-
+    UNUSED(blnEnableCWID);
 }
 
 
@@ -1347,7 +1350,7 @@ void DeCompressCallsign(char * bytCallsign, char * returned)
 	char bytTest[10] = "";
 	char SSID[8] = "";
     
-	Bit6ToASCII(bytCallsign, bytTest);
+    Bit6ToASCII((UCHAR *)bytCallsign, (UCHAR *)bytTest);
 
 	memcpy(returned, bytTest, 7);
 	returned[7] = 0;
@@ -1369,7 +1372,7 @@ void DeCompressCallsign(char * bytCallsign, char * returned)
 void DeCompressGridSquare(char * bytGS, char * returned)
 {
 	char bytTest[10] = "";
-	Bit6ToASCII(bytGS, bytTest);
+    Bit6ToASCII((UCHAR *)bytGS, (UCHAR *)bytTest);
 
 	strlop(bytTest, ' ');
 	strcpy(returned, bytTest);
@@ -1512,7 +1515,7 @@ BOOL checkcrc16(unsigned char * Data, unsigned short length)
     
 void GenCRC16FrameType(char * Data, int Length, UCHAR bytFrameType)
 {
-	unsigned int CRC = GenCRC16(Data, Length);
+    unsigned int CRC = GenCRC16((UCHAR *)Data, Length);
 
 	// Put the two CRC bytes after the stop index
 
@@ -1844,7 +1847,7 @@ int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 
 	int intNumCar, intBaud, intDataLen, intRSLen, bytDataToSendLengthPtr, intEncodedDataPtr;
 
-	int intCarDataCnt, intStartIndex;
+    int intCarDataCnt, intStartIndex; UNUSED(intStartIndex);
 	BOOL blnOdd;
 	char strType[18];
 	char strMod[16];
@@ -1906,7 +1909,7 @@ int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 			}
 		}
 
-		GenCRC16FrameType(bytToRS, intDataLen + 1, bytFrameType); // calculate the CRC on the byte count + data bytes
+        GenCRC16FrameType((char *)bytToRS, intDataLen + 1, bytFrameType); // calculate the CRC on the byte count + data bytes
 
 		RSEncode(bytToRS, bytToRS + intDataLen + 3, intDataLen + 3, intRSLen);  // Generate the RS encoding ...now 14 bytes total
 
@@ -1949,7 +1952,7 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 
 	int intNumCar, intBaud, intDataLen, intRSLen, bytDataToSendLengthPtr, intEncodedDataPtr;
 
-	int intCarDataCnt, intStartIndex;
+    int intCarDataCnt, intStartIndex; UNUSED(intStartIndex);
 	BOOL blnOdd;
 	char strType[18];
 	char strMod[16];
@@ -2006,7 +2009,7 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 				}
 			}
 
-			GenCRC16FrameType(bytToRS, intDataLen + 1, bytFrameType); // calculate the CRC on the byte count + data bytes
+            GenCRC16FrameType((char *)bytToRS, intDataLen + 1, bytFrameType); // calculate the CRC on the byte count + data bytes
 
 			RSEncode(bytToRS, bytToRS + intDataLen + 3, intDataLen + 3, intRSLen);  // Generate the RS encoding ...now 14 bytes total
 
@@ -2046,7 +2049,7 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 				bytDataToSendLengthPtr += intCarDataCnt;
 			}
 		}
-		GenCRC16FrameType(bytToRS, intDataLen / 3 + 1, bytFrameType); // calculate the CRC on the byte count + data bytes
+        GenCRC16FrameType((char *)bytToRS, intDataLen / 3 + 1, bytFrameType); // calculate the CRC on the byte count + data bytes
 
 		RSEncode(bytToRS, bytToRS + intDataLen / 3 + 3, intDataLen / 3 + 3, intRSLen / 3);  // Generate the RS encoding ...now 14 bytes total
 		intEncodedDataPtr += intDataLen / 3 + 3 + intRSLen / 3;
@@ -2058,12 +2061,15 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 
 void DrawRXFrame(int State, const char * Frame)
 {
+    UNUSED(State); UNUSED(Frame);
 }
 void DrawTXFrame(const char * Frame)
 {
+    UNUSED(Frame);
 }
 
 int SendtoGUI(char Type, unsigned char * Msg, int Len)
 {
+    UNUSED(Type); UNUSED(Msg); UNUSED(Len);
 	return 0;
 }

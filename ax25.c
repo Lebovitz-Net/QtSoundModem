@@ -21,6 +21,7 @@ along with QtSoundModem.  If not, see http://www.gnu.org/licenses
 // UZ7HO Soundmodem Port by John Wiseman G8BPQ
 
 #include "UZ7HOStuff.h"
+#include <arpa/inet.h>
 
 #ifdef WIN32
 
@@ -31,11 +32,14 @@ __declspec(dllimport) unsigned short __stdcall ntohs(__in unsigned short hostsho
 
 #define strtok_s strtok_r
 #include <stddef.h>
-#endif 
+#endif
+
+void set_DM(int snd_ch, Byte * path);
+void  rst_values(TAX25Port * AX25Sess);
 
 void decode_frame(Byte * frame, int len, Byte * path, string * data,
-	Byte * pid, Byte * nr, Byte * ns, Byte * f_type, Byte * f_id,
-	Byte *  rpt, Byte * pf, Byte * cr);
+    Byte * pid, Byte * nr, Byte * ns, Byte * f_type, Byte * f_id,
+    Byte *  rpt, Byte * pf, Byte * cr);
 
 /*
 
@@ -107,7 +111,7 @@ const
   STAT_WAIT_ANS=3;
   STAT_TRY_LINK=4;
   STAT_TRY_UNLINK=5;
-  // Сmd,Resp,Poll,Final,Digipeater flags
+  // ?md,Resp,Poll,Final,Digipeater flags
   SET_P=TRUE;
   SET_F=FALSE;
   SET_C=TRUE;
@@ -145,7 +149,7 @@ const
 
 
 unsigned short CRCTable[256] = {
-	  0,  4489,  8978, 12955, 17956, 22445, 25910, 29887,
+      0,  4489,  8978, 12955, 17956, 22445, 25910, 29887,
   35912, 40385, 44890, 48851, 51820, 56293, 59774, 63735,
    4225,   264, 13203,  8730, 22181, 18220, 30135, 25662,
   40137, 36160, 49115, 44626, 56045, 52068, 63999, 59510,
@@ -196,8 +200,8 @@ TStringList all_frame_buf[5];
 
 typedef struct registeredCalls_t
 {
-	UCHAR myCall[7];		// call in ax.25
-	void * socket;
+    UCHAR myCall[7];		// call in ax.25
+    void * socket;
 
 } registeredCalls;
 
@@ -277,28 +281,28 @@ uses ax25_l2,sm_main;
 
 void scrambler(UCHAR * in_buf, int Len)
 {
-	integer i;
-	word  sreg;
-	Byte  a = 0, k;
+    integer i;
+    word  sreg;
+    Byte  a = 0, k;
 
-	sreg = 0x1ff;
+    sreg = 0x1ff;
 
-	for (i = 0; i < Len; i++)
-	{
-		for (k = 0; k < 8; k++)
-		{
+    for (i = 0; i < Len; i++)
+    {
+        for (k = 0; k < 8; k++)
+        {
 
-			//	a: = (a shr 1) or (sreg and 1 shl 7);
+            //	a: = (a shr 1) or (sreg and 1 shl 7);
 
-			a = (a >> 1) | ((sreg & 1) << 7);
+            a = (a >> 1) | ((sreg & 1) << 7);
 
-			//	sreg: = (sreg shl 4 and $200) xor (sreg shl 8 and $200) or (sreg shr 1);
+            //	sreg: = (sreg shl 4 and $200) xor (sreg shl 8 and $200) or (sreg shr 1);
 
 
-			sreg = (((sreg << 4) & 0x200) ^ ((sreg << 8) & 0x200)) | (sreg >> 1);
-		}
-		in_buf[i] = in_buf[i] ^ a;
-	}
+            sreg = (((sreg << 4) & 0x200) ^ ((sreg << 8) & 0x200)) | (sreg >> 1);
+        }
+        in_buf[i] = in_buf[i] ^ a;
+    }
 }
 
 
@@ -314,21 +318,21 @@ begin
   s:='';
   if length(data)=7 then
   begin
-	for i:=1 to 6 do
-	begin
-	  a:=ord(data[i]) shr 1;
-	  if (a in [$30..$39,$41..$5A]) then s:=s+chr(a);
-	end;
-	a:=ord(data[7]) shr 1 and 15;
-	if a>0 then s:=s+'-'+inttostr(a);
+    for i:=1 to 6 do
+    begin
+      a:=ord(data[i]) shr 1;
+      if (a in [$30..$39,$41..$5A]) then s:=s+chr(a);
+    end;
+    a:=ord(data[7]) shr 1 and 15;
+    if a>0 then s:=s+'-'+inttostr(a);
   end
   else
   begin
-	if length(data)>0 then
-	begin
-	  for i:=1 to length(data) do
-		if i=1 then s:=dec2hex(ord(data[i])) else s:=s+':'+dec2hex(ord(data[i]));
-	end;
+    if length(data)>0 then
+    begin
+      for i:=1 to length(data) do
+        if i=1 then s:=dec2hex(ord(data[i])) else s:=s+':'+dec2hex(ord(data[i]));
+    end;
   end;
   if s<>'' then s:=s+' ';
   result:=s;
@@ -342,8 +346,8 @@ begin
   s:='';
   if length(data)>0 then
   begin
-	for i:=1 to length(data) do
-	  if i=1 then s:=inttostr(ord(data[i])) else s:=s+'.'+inttostr(ord(data[i]));
+    for i:=1 to length(data) do
+      if i=1 then s:=inttostr(ord(data[i])) else s:=s+'.'+inttostr(ord(data[i]));
   end;
   if s<>'' then s:=s+' ';
   result:=s;
@@ -361,14 +365,14 @@ begin
   s:=data;
   if length(data)>7 then
   begin
-	hlen:=ord(data[5]);
-	plen:=ord(data[6]);
-	oper:=(ord(data[7]) shl 8 or ord(data[8])) and 2;
-	i:=9;      sha:=get_callsign(copy(data,i,hlen));
-	i:=i+hlen; spa:=get_ip(copy(data,i,plen));
-	i:=i+plen; tha:=get_callsign(copy(data,i,hlen));
-	i:=i+hlen; tpa:=get_ip(copy(data,i,plen));
-	s:='  [ARP] '+opcode[oper]+' from '+sha+spa+'to '+tha+tpa;
+    hlen:=ord(data[5]);
+    plen:=ord(data[6]);
+    oper:=(ord(data[7]) shl 8 or ord(data[8])) and 2;
+    i:=9;      sha:=get_callsign(copy(data,i,hlen));
+    i:=i+hlen; spa:=get_ip(copy(data,i,plen));
+    i:=i+plen; tha:=get_callsign(copy(data,i,hlen));
+    i:=i+hlen; tpa:=get_ip(copy(data,i,plen));
+    s:='  [ARP] '+opcode[oper]+' from '+sha+spa+'to '+tha+tpa;
   end;
   result:=s;
 end;
@@ -377,50 +381,50 @@ function parse_NETROM(data: string; f_id: byte): string;
 
   function deshift_AX25(data: string): string;
   var
-	i: byte;
-	call: string[6];
-	ssid: string[2];
+    i: byte;
+    call: string[6];
+    ssid: string[2];
   begin
-	result:='';
-	if length(data)<7 then exit;
-	for i:=1 to 7 do data[i]:=chr(ord(data[i]) shr 1);
-	call:=trim(copy(data,1,6));
-	ssid:=trim(inttostr(ord(data[7]) and 15));
-	if ssid='0' then result:=call else result:=call+'-'+ssid;
+    result:='';
+    if length(data)<7 then exit;
+    for i:=1 to 7 do data[i]:=chr(ord(data[i]) shr 1);
+    call:=trim(copy(data,1,6));
+    ssid:=trim(inttostr(ord(data[7]) and 15));
+    if ssid='0' then result:=call else result:=call+'-'+ssid;
   end;
 
   function con_req_info(data: string): string;
   var
-	s_call: string;
-	d_call: string;
-	w: byte;
-	t_o: byte;
+    s_call: string;
+    d_call: string;
+    w: byte;
+    t_o: byte;
   begin
-	result:='';
-	if length(data)>14 then
-	begin
-	  w:=ord(data[1]);
-	  s_call:=deshift_AX25(copy(data,2,7));
-	  d_call:=deshift_AX25(copy(data,9,7));
-	  result:=' w='+inttostr(w)+' '+s_call+' at '+d_call;
-	end;
-	if length(data)>15 then
-	begin
-	  t_o:=ord(data[16]);
-	  result:=result+' t/o '+inttostr(t_o);
-	end;
+    result:='';
+    if length(data)>14 then
+    begin
+      w:=ord(data[1]);
+      s_call:=deshift_AX25(copy(data,2,7));
+      d_call:=deshift_AX25(copy(data,9,7));
+      result:=' w='+inttostr(w)+' '+s_call+' at '+d_call;
+    end;
+    if length(data)>15 then
+    begin
+      t_o:=ord(data[16]);
+      result:=result+' t/o '+inttostr(t_o);
+    end;
   end;
 
   function con_ack_info(data: string): string;
   var
-	w: byte;
+    w: byte;
   begin
-	result:='';
-	if length(data)>0 then
-	begin
-	  w:=ord(data[1]);
-	  result:=' w='+inttostr(w);
-	end;
+    result:='';
+    if length(data)>0 then
+    begin
+      w:=ord(data[1]);
+      result:=' w='+inttostr(w);
+    end;
   end;
 
 const
@@ -451,90 +455,90 @@ begin
   s:=data;
   if length(data)>0 then
   begin
-	if data[1]=#$FF then
-	begin
-	  delete(data,1,1);
-	  //Nodes broadcasting
-	  if (f_id=U_UI) and (length(data)>5) then
-	  begin
-		s_node:=copy(data,1,6);
-		delete(data,1,6);
-		s:='NODES broadcast from '+s_node+#13#10;
-		while length(data)>20 do
-		begin
-		  d_call:=deshift_AX25(copy(data,1,7));
-		  d_node:=copy(data,8,6);
-		  b_call:=deshift_AX25(copy(data,14,7));
-		  quality:=ord(data[21]);
-		  delete(data,1,21);
-		  s:=s+'  '+d_node+':'+d_call+' via '+b_call+' Q='+inttostr(quality)+#13#10;
-		end;
-	  end;
-	  // INP3 RIF
-	  if (f_id=I_I) and (length(data)>10) then
-	  begin
-		s:='[INP3 RIF]'+#13#10;
-		while length(data)>10 do
-		begin
-		  d_call:=deshift_AX25(copy(data,1,7));
-		  hops:=ord(data[8]);
-		  rtt:=(ord(data[9]) shl 8) or ord(data[10]);
-		  delete(data,1,10);
-		  inp3_ext_fields:=TRUE;
-		  inp3_nr_field:=0;
-		  while (length(data)>0) and inp3_ext_fields do
-		  begin
-			inp3_field_len:=ord(data[1]);
-			if inp3_field_len>0 then
-			begin
-			  if (inp3_nr_field=0) and (length(data)>1) then
-			  begin
-				if data[2]=#0 then d_call:=copy(data,3,inp3_field_len-2)+':'+d_call; // Copy alias
-			  end;
-			  delete(data,1,inp3_field_len);
-			  inc(inp3_nr_field);
-			end
-			else inp3_ext_fields:=FALSE;
-		  end;
-		  delete(data,1,1);
-		  s:=s+d_call+' hops='+inttostr(hops)+' rtt='+inttostr(rtt)+#13#10;
-		end;
-	  end;
-	end
-	else
-	begin
-	  // NETROM frames
-	  if length(data)>19 then
-	  begin
-		s_call:=deshift_AX25(copy(data,1,7));
-		d_call:=deshift_AX25(copy(data,8,7));
-		ttl:=ord(data[15]);
-		netrom_header:=copy(data,16,5);
-		delete(data,1,20);
-		c_idx:=ord(netrom_header[1]);
-		c_ID:=ord(netrom_header[2]);
-		TX_nr:=ord(netrom_header[3]);
-		RX_nr:=ord(netrom_header[4]);
-		opcode:=ord(netrom_header[5]);
-		// Opcode flags
-		opc_flags:='';
-		if opcode and 128 = 128 then opc_flags:=opc_flags+' C';
-		if opcode and 64  = 64  then opc_flags:=opc_flags+' N';
-		//
-		s:='  [NETROM] '+s_call+' to '+d_call+' ttl='+inttostr(ttl)+' cct='+dec2hex(c_idx)+dec2hex(c_ID);
-		r_s_nr:=' S'+inttostr(TX_nr)+' R'+inttostr(RX_nr);
-		case (opcode and 7) of
-		  0 : s:=s+' <'+opcode_arr[opcode and 7]+r_s_nr+'>'+#13#10+data;
-		  1 : s:=s+' <'+opcode_arr[opcode and 7]+'>'+con_req_info(data);
-		  2 : s:=s+' <'+opcode_arr[opcode and 7]+'>'+con_ack_info(data)+' my cct='+dec2hex(TX_nr)+dec2hex(RX_nr);
-		  3 : s:=s+' <'+opcode_arr[opcode and 7]+'>';
-		  4 : s:=s+' <'+opcode_arr[opcode and 7]+'>';
-		  5 : s:=s+' <'+opcode_arr[opcode and 7]+r_s_nr+'>:'+#13#10+data;
-		  6 : s:=s+' <'+opcode_arr[opcode and 7]+' R'+inttostr(RX_nr)+'>'+opc_flags;
-		  7 : s:=s+' <'+opcode_arr[opcode and 7]+r_s_nr+'>'+#13#10+data;
-		end;
-	  end;
-	end;
+    if data[1]=#$FF then
+    begin
+      delete(data,1,1);
+      //Nodes broadcasting
+      if (f_id=U_UI) and (length(data)>5) then
+      begin
+        s_node:=copy(data,1,6);
+        delete(data,1,6);
+        s:='NODES broadcast from '+s_node+#13#10;
+        while length(data)>20 do
+        begin
+          d_call:=deshift_AX25(copy(data,1,7));
+          d_node:=copy(data,8,6);
+          b_call:=deshift_AX25(copy(data,14,7));
+          quality:=ord(data[21]);
+          delete(data,1,21);
+          s:=s+'  '+d_node+':'+d_call+' via '+b_call+' Q='+inttostr(quality)+#13#10;
+        end;
+      end;
+      // INP3 RIF
+      if (f_id=I_I) and (length(data)>10) then
+      begin
+        s:='[INP3 RIF]'+#13#10;
+        while length(data)>10 do
+        begin
+          d_call:=deshift_AX25(copy(data,1,7));
+          hops:=ord(data[8]);
+          rtt:=(ord(data[9]) shl 8) or ord(data[10]);
+          delete(data,1,10);
+          inp3_ext_fields:=TRUE;
+          inp3_nr_field:=0;
+          while (length(data)>0) and inp3_ext_fields do
+          begin
+            inp3_field_len:=ord(data[1]);
+            if inp3_field_len>0 then
+            begin
+              if (inp3_nr_field=0) and (length(data)>1) then
+              begin
+                if data[2]=#0 then d_call:=copy(data,3,inp3_field_len-2)+':'+d_call; // Copy alias
+              end;
+              delete(data,1,inp3_field_len);
+              inc(inp3_nr_field);
+            end
+            else inp3_ext_fields:=FALSE;
+          end;
+          delete(data,1,1);
+          s:=s+d_call+' hops='+inttostr(hops)+' rtt='+inttostr(rtt)+#13#10;
+        end;
+      end;
+    end
+    else
+    begin
+      // NETROM frames
+      if length(data)>19 then
+      begin
+        s_call:=deshift_AX25(copy(data,1,7));
+        d_call:=deshift_AX25(copy(data,8,7));
+        ttl:=ord(data[15]);
+        netrom_header:=copy(data,16,5);
+        delete(data,1,20);
+        c_idx:=ord(netrom_header[1]);
+        c_ID:=ord(netrom_header[2]);
+        TX_nr:=ord(netrom_header[3]);
+        RX_nr:=ord(netrom_header[4]);
+        opcode:=ord(netrom_header[5]);
+        // Opcode flags
+        opc_flags:='';
+        if opcode and 128 = 128 then opc_flags:=opc_flags+' C';
+        if opcode and 64  = 64  then opc_flags:=opc_flags+' N';
+        //
+        s:='  [NETROM] '+s_call+' to '+d_call+' ttl='+inttostr(ttl)+' cct='+dec2hex(c_idx)+dec2hex(c_ID);
+        r_s_nr:=' S'+inttostr(TX_nr)+' R'+inttostr(RX_nr);
+        case (opcode and 7) of
+          0 : s:=s+' <'+opcode_arr[opcode and 7]+r_s_nr+'>'+#13#10+data;
+          1 : s:=s+' <'+opcode_arr[opcode and 7]+'>'+con_req_info(data);
+          2 : s:=s+' <'+opcode_arr[opcode and 7]+'>'+con_ack_info(data)+' my cct='+dec2hex(TX_nr)+dec2hex(RX_nr);
+          3 : s:=s+' <'+opcode_arr[opcode and 7]+'>';
+          4 : s:=s+' <'+opcode_arr[opcode and 7]+'>';
+          5 : s:=s+' <'+opcode_arr[opcode and 7]+r_s_nr+'>:'+#13#10+data;
+          6 : s:=s+' <'+opcode_arr[opcode and 7]+' R'+inttostr(RX_nr)+'>'+opc_flags;
+          7 : s:=s+' <'+opcode_arr[opcode and 7]+r_s_nr+'>'+#13#10+data;
+        end;
+      end;
+    end;
   end;
   result:=s;
 end;
@@ -543,87 +547,87 @@ function parse_IP(data: string): string;
 
   function parse_ICMP(var data: string): string;
   var
-	ICMP_type: byte;
-	ICMP_code: byte;
-	s: string;
+    ICMP_type: byte;
+    ICMP_code: byte;
+    s: string;
   begin
-	result:='';
-	if length(data)>3 then
-	begin
-	  ICMP_type:=ord(data[1]);
-	  ICMP_code:=ord(data[2]);
-	  delete(data,1,4);
-	  s:='  [ICMP] Type='+inttostr(ICMP_type)+' Code='+inttostr(ICMP_code)+#13#10;
-	  result:=s;
-	end;
+    result:='';
+    if length(data)>3 then
+    begin
+      ICMP_type:=ord(data[1]);
+      ICMP_code:=ord(data[2]);
+      delete(data,1,4);
+      s:='  [ICMP] Type='+inttostr(ICMP_type)+' Code='+inttostr(ICMP_code)+#13#10;
+      result:=s;
+    end;
   end;
 
   function parse_TCP(var data: string): string;
   var
-	s: string;
-	src_port: string;
-	dest_port: string;
-	wnd: string;
-	ihl: word;
-	idl: word;
-	flags: byte;
-	seq: string;
-	ack: string;
-	s_flags: string;
-	s_idl: string;
+    s: string;
+    src_port: string;
+    dest_port: string;
+    wnd: string;
+    ihl: word;
+    idl: word;
+    flags: byte;
+    seq: string;
+    ack: string;
+    s_flags: string;
+    s_idl: string;
   begin
-	result:='';
-	if length(data)>19 then
-	begin
-	  src_port:=' src_port:'+inttostr((ord(data[1]) shl 8)+ord(data[2]));
-	  dest_port:=' dest_port:'+inttostr((ord(data[3]) shl 8)+ord(data[4]));
-	  seq:=' seq='+dec2hex(ord(data[5]))+dec2hex(ord(data[6]))+dec2hex(ord(data[7]))+dec2hex(ord(data[8]));
-	  ack:=' ack='+dec2hex(ord(data[9]))+dec2hex(ord(data[10]))+dec2hex(ord(data[11]))+dec2hex(ord(data[12]));
-	  ihl:=(ord(data[13]) shr 4)*4;
-	  idl:=length(data)-ihl;
-	  flags:=ord(data[14]);
-	  wnd:=' wnd='+inttostr((ord(data[15]) shl 8)+ord(data[16]));
-	  delete(data,1,ihl);
-	  //
-	  s_flags:=' ';
-	  if (flags and 32)=32 then s_flags:=s_flags+'URG ';
-	  if (flags and 16)=16 then s_flags:=s_flags+'ACK ';
-	  if (flags and 8)=8   then s_flags:=s_flags+'PSH ';
-	  if (flags and 4)=4   then s_flags:=s_flags+'RST ';
-	  if (flags and 2)=2   then s_flags:=s_flags+'SYN ';
-	  if (flags and 1)=1   then s_flags:=s_flags+'FIN ';
-	  //
-	  if idl>0 then s_idl:=' data='+inttostr(idl) else s_idl:='';
-	  if (flags and 16)<>16 then ack:='';
-	  //
-	  s:='  [TCP]'+src_port+dest_port+seq+ack+wnd+s_idl+s_flags+#13#10;
-	  result:=s;
-	end;
+    result:='';
+    if length(data)>19 then
+    begin
+      src_port:=' src_port:'+inttostr((ord(data[1]) shl 8)+ord(data[2]));
+      dest_port:=' dest_port:'+inttostr((ord(data[3]) shl 8)+ord(data[4]));
+      seq:=' seq='+dec2hex(ord(data[5]))+dec2hex(ord(data[6]))+dec2hex(ord(data[7]))+dec2hex(ord(data[8]));
+      ack:=' ack='+dec2hex(ord(data[9]))+dec2hex(ord(data[10]))+dec2hex(ord(data[11]))+dec2hex(ord(data[12]));
+      ihl:=(ord(data[13]) shr 4)*4;
+      idl:=length(data)-ihl;
+      flags:=ord(data[14]);
+      wnd:=' wnd='+inttostr((ord(data[15]) shl 8)+ord(data[16]));
+      delete(data,1,ihl);
+      //
+      s_flags:=' ';
+      if (flags and 32)=32 then s_flags:=s_flags+'URG ';
+      if (flags and 16)=16 then s_flags:=s_flags+'ACK ';
+      if (flags and 8)=8   then s_flags:=s_flags+'PSH ';
+      if (flags and 4)=4   then s_flags:=s_flags+'RST ';
+      if (flags and 2)=2   then s_flags:=s_flags+'SYN ';
+      if (flags and 1)=1   then s_flags:=s_flags+'FIN ';
+      //
+      if idl>0 then s_idl:=' data='+inttostr(idl) else s_idl:='';
+      if (flags and 16)<>16 then ack:='';
+      //
+      s:='  [TCP]'+src_port+dest_port+seq+ack+wnd+s_idl+s_flags+#13#10;
+      result:=s;
+    end;
   end;
 
   function parse_UDP(var data: string): string;
   var
-	s: string;
-	src_port: string;
-	dest_port: string;
-	idl: word;
-	len: word;
-	s_idl: string;
+    s: string;
+    src_port: string;
+    dest_port: string;
+    idl: word;
+    len: word;
+    s_idl: string;
   begin
-	result:='';
-	if length(data)>7 then
-	begin
-	  src_port:=' src_port:'+inttostr((ord(data[1]) shl 8)+ord(data[2]));
-	  dest_port:=' dest_port:'+inttostr((ord(data[3]) shl 8)+ord(data[4]));
-	  len:=(ord(data[5]) shl 8)+ord(data[6]);
-	  idl:=len-8;
-	  delete(data,1,8);
-	  //
-	  if idl>0 then s_idl:=' data='+inttostr(idl) else s_idl:='';
-	  //
-	  s:='  [UDP]'+src_port+dest_port+' len='+inttostr(len)+s_idl+#13#10;
-	  result:=s;
-	end;
+    result:='';
+    if length(data)>7 then
+    begin
+      src_port:=' src_port:'+inttostr((ord(data[1]) shl 8)+ord(data[2]));
+      dest_port:=' dest_port:'+inttostr((ord(data[3]) shl 8)+ord(data[4]));
+      len:=(ord(data[5]) shl 8)+ord(data[6]);
+      idl:=len-8;
+      delete(data,1,8);
+      //
+      if idl>0 then s_idl:=' data='+inttostr(idl) else s_idl:='';
+      //
+      s:='  [UDP]'+src_port+dest_port+' len='+inttostr(len)+s_idl+#13#10;
+      result:=s;
+    end;
   end;
 
 const
@@ -645,26 +649,26 @@ begin
   s:=data;
   if length(data)>19 then
   begin
-	ihl:=(ord(data[1]) and 15)*4;
-	len:=' len='+inttostr((ord(data[3]) shl 8)+ord(data[4]));
-	fragment_offset:=((ord(data[7]) shl 8)+ord(data[8])) shl 3;
-	ttl:=' ttl='+inttostr(ord(data[9]));
-	c_prot:=data[10];
-	src_ip:=' Fm '+inttostr(ord(data[13]))+'.'+inttostr(ord(data[14]))+'.'+inttostr(ord(data[15]))+'.'+inttostr(ord(data[16]));
-	dest_ip:=' To '+inttostr(ord(data[17]))+'.'+inttostr(ord(data[18]))+'.'+inttostr(ord(data[19]))+'.'+inttostr(ord(data[20]));
-	delete(data,1,ihl);
-	//
-	p:=pos(c_prot,prot_idx);
-	if p>0 then s_prot:=' prot='+prot_name[p] else s_prot:=' prot=Type'+inttostr(ord(c_prot));
-	if fragment_offset>0 then offset:=' offset='+inttostr(fragment_offset) else offset:='';
-	s:='  [IP]'+src_ip+dest_ip+s_prot+ttl+len+offset+#13#10;
-	if fragment_offset=0 then
-	case p of
-	  1 : s:=s+parse_ICMP(data);
-	  2 : s:=s+parse_TCP(data);
-	  3 : s:=s+parse_UDP(data);
-	end;
-	s:=s+data;
+    ihl:=(ord(data[1]) and 15)*4;
+    len:=' len='+inttostr((ord(data[3]) shl 8)+ord(data[4]));
+    fragment_offset:=((ord(data[7]) shl 8)+ord(data[8])) shl 3;
+    ttl:=' ttl='+inttostr(ord(data[9]));
+    c_prot:=data[10];
+    src_ip:=' Fm '+inttostr(ord(data[13]))+'.'+inttostr(ord(data[14]))+'.'+inttostr(ord(data[15]))+'.'+inttostr(ord(data[16]));
+    dest_ip:=' To '+inttostr(ord(data[17]))+'.'+inttostr(ord(data[18]))+'.'+inttostr(ord(data[19]))+'.'+inttostr(ord(data[20]));
+    delete(data,1,ihl);
+    //
+    p:=pos(c_prot,prot_idx);
+    if p>0 then s_prot:=' prot='+prot_name[p] else s_prot:=' prot=Type'+inttostr(ord(c_prot));
+    if fragment_offset>0 then offset:=' offset='+inttostr(fragment_offset) else offset:='';
+    s:='  [IP]'+src_ip+dest_ip+s_prot+ttl+len+offset+#13#10;
+    if fragment_offset=0 then
+    case p of
+      1 : s:=s+parse_ICMP(data);
+      2 : s:=s+parse_TCP(data);
+      3 : s:=s+parse_UDP(data);
+    end;
+    s:=s+data;
   end;
   result:=s;
 end;
@@ -696,31 +700,31 @@ end;
 
 unsigned short get_fcs(UCHAR * Data, unsigned short len)
 {
-	unsigned short i;
-	unsigned short result;
+    unsigned short i;
+    unsigned short result;
 
-	result = 0xFFFF;
+    result = 0xFFFF;
 
-	if (len == 0)
-		return result;
+    if (len == 0)
+        return result;
 
-	for (i = 0; i < len; i++)
-		result = (result >> 8) ^ CRCTable[(result ^ Data[i]) & 0xff];
+    for (i = 0; i < len; i++)
+        result = (result >> 8) ^ CRCTable[(result ^ Data[i]) & 0xff];
 
 
-	result ^= 0xffff;
+    result ^= 0xffff;
 
-	return result;
+    return result;
 }
 
 
 unsigned short CRCTAB[256] = {
-	0x0000, 0x1189, 0x2312, 0x329b, 0x4624, 0x57ad, 0x6536, 0x74bf,
-	0x8c48, 0x9dc1, 0xaf5a, 0xbed3, 0xca6c, 0xdbe5, 0xe97e, 0xf8f7,
-	0x1081, 0x0108, 0x3393, 0x221a, 0x56a5, 0x472c, 0x75b7, 0x643e,
-	0x9cc9, 0x8d40, 0xbfdb, 0xae52, 0xdaed, 0xcb64, 0xf9ff, 0xe876,
-	0x2102, 0x308b, 0x0210, 0x1399, 0x6726, 0x76af, 0x4434, 0x55bd,
-	0xad4a, 0xbcc3, 0x8e58, 0x9fd1, 0xeb6e, 0xfae7, 0xc87c, 0xd9f5,
+    0x0000, 0x1189, 0x2312, 0x329b, 0x4624, 0x57ad, 0x6536, 0x74bf,
+    0x8c48, 0x9dc1, 0xaf5a, 0xbed3, 0xca6c, 0xdbe5, 0xe97e, 0xf8f7,
+    0x1081, 0x0108, 0x3393, 0x221a, 0x56a5, 0x472c, 0x75b7, 0x643e,
+    0x9cc9, 0x8d40, 0xbfdb, 0xae52, 0xdaed, 0xcb64, 0xf9ff, 0xe876,
+    0x2102, 0x308b, 0x0210, 0x1399, 0x6726, 0x76af, 0x4434, 0x55bd,
+    0xad4a, 0xbcc3, 0x8e58, 0x9fd1, 0xeb6e, 0xfae7, 0xc87c, 0xd9f5,
 0x3183, 0x200a, 0x1291, 0x0318, 0x77a7, 0x662e, 0x54b5, 0x453c,
 0xbdcb, 0xac42, 0x9ed9, 0x8f50, 0xfbef, 0xea66, 0xd8fd, 0xc974,
 0x4204, 0x538d, 0x6116, 0x709f, 0x0420, 0x15a9, 0x2732, 0x36bb,
@@ -751,15 +755,15 @@ unsigned short CRCTAB[256] = {
 
 unsigned short int compute_crc(unsigned char *buf, int len)
 {
-	unsigned short fcs = 0xffff;
-	int i;
+    unsigned short fcs = 0xffff;
+    int i;
 
-	for (i = 0; i < len; i++)
-		fcs = (fcs >> 8) ^ CRCTAB[(fcs ^ buf[i]) & 0xff];
+    for (i = 0; i < len; i++)
+        fcs = (fcs >> 8) ^ CRCTAB[(fcs ^ buf[i]) & 0xff];
 
-	fcs ^= 0xffff;
+    fcs ^= 0xffff;
 
-	return fcs;
+    return fcs;
 }
 
 /*
@@ -781,9 +785,9 @@ begin
   i:=0;
   s2:=s+border;
   repeat
-	a[i]:=copy(s2,0,pos(border,s2)-1);
-	delete(s2,1,length(a[i]+border));
-	inc(i);
+    a[i]:=copy(s2,0,pos(border,s2)-1);
+    delete(s2,1,length(a[i]+border));
+    inc(i);
   until (s2='') or (i=p1);
 end;
 
@@ -805,40 +809,40 @@ var
 begin
   for i:=0 to ADDR_MAX_LEN-1 do
   begin
-	a_path[i]:='';
-	calls[i]:='';
-	ssids[i]:=0;
+    a_path[i]:='';
+    calls[i]:='';
+    ssids[i]:=0;
   end;
-  //Разделяем позывные
+  //????????? ????????
   try explode(a_path,',',path,ADDR_MAX_LEN); except end;
-  //Разделяем позывные и ssid
+  //????????? ???????? ? ssid
   cnt:=0;
   repeat
-	a_call[0]:=''; a_call[1]:='';
-	try explode(a_call,'-',a_path[cnt],2); except end;
-	if a_call[0]<>'' then
-	begin
-	  calls[cnt]:=copy(a_call[0]+'      ',1,6);
-	  if a_call[1]='' then a_call[1]:='0';
-	  try ssids[cnt]:=strtoint(a_call[1]); except ssids[cnt]:=0; end;
-	  inc(cnt);
-	end;
+    a_call[0]:=''; a_call[1]:='';
+    try explode(a_call,'-',a_path[cnt],2); except end;
+    if a_call[0]<>'' then
+    begin
+      calls[cnt]:=copy(a_call[0]+'      ',1,6);
+      if a_call[1]='' then a_call[1]:='0';
+      try ssids[cnt]:=strtoint(a_call[1]); except ssids[cnt]:=0; end;
+      inc(cnt);
+    end;
   until (a_call[0]='') or (cnt=ADDR_MAX_LEN);
-  //Формируем адресную строку
+  //????????? ???????? ??????
   addr:='';
   if cnt>1 then
   begin
-	for i:=0 to cnt-1 do
-	begin
-	  if (cr=SET_C) and (i=A_RX) then ssids[i]:=ssids[i]+C_BIT; //Добавляем C в CRRSSID1
-	  if (cr=SET_R) and (i=A_TX) then ssids[i]:=ssids[i]+C_BIT; //Добавляем C в CRRSSID1
-	  if rpt and (i>A_TX) then
-		if calls[i]=mydigi then ssids[i]:=ssids[i]+H_BIT; //Добавляем H в HRRSSID1
-	  ssids[i]:=ssids[i]+RR_BIT; //Добавляем RR в xRRSSID1
-	  addr:=addr+calls[i]+chr(ssids[i]);
-	end;
-	for n:=1 to length(addr) do addr[n]:=chr(ord(addr[n]) shl 1); //сдвигаем на 1 бит октеты
-	addr[length(addr)]:=chr(ord(addr[length(addr)]) xor 1); //устанавливаем конец адреса
+    for i:=0 to cnt-1 do
+    begin
+      if (cr=SET_C) and (i=A_RX) then ssids[i]:=ssids[i]+C_BIT; //????????? C ? CRRSSID1
+      if (cr=SET_R) and (i=A_TX) then ssids[i]:=ssids[i]+C_BIT; //????????? C ? CRRSSID1
+      if rpt and (i>A_TX) then
+        if calls[i]=mydigi then ssids[i]:=ssids[i]+H_BIT; //????????? H ? HRRSSID1
+      ssids[i]:=ssids[i]+RR_BIT; //????????? RR ? xRRSSID1
+      addr:=addr+calls[i]+chr(ssids[i]);
+    end;
+    for n:=1 to length(addr) do addr[n]:=chr(ord(addr[n]) shl 1); //???????? ?? 1 ??? ??????
+    addr[length(addr)]:=chr(ord(addr[length(addr)]) xor 1); //????????????? ????? ??????
   end;
   result:=addr;
 end;
@@ -846,329 +850,330 @@ end;
 
 int get_addr(char * Calls, UCHAR * AXCalls)
 {
-	//	CONVERT CALL + OPTIONAL DIGI STRING TO AX25, RETURN 
-	//	CONVERTED STRING IN AXCALLS. Return FALSE if invalied
+    //	CONVERT CALL + OPTIONAL DIGI STRING TO AX25, RETURN
+    //	CONVERTED STRING IN AXCALLS. Return FALSE if invalied
 
-	Byte * axptr = AXCalls;
-	char * ptr, *Context;
-	int n = 8;						// Max digis
+    Byte * axptr = AXCalls;
+    char * ptr, *Context;
+    int n = 8;						// Max digis
 
-	memset(AXCalls, 0, 70);
+    memset(AXCalls, 0, 70);
 
-	ptr = strtok_s(Calls, " ,", &Context);
+    ptr = strtok_s(Calls, " ,", &Context);
 
-	if (ptr == NULL)
-		return FALSE;
+    if (ptr == NULL)
+        return FALSE;
 
-	// First field is Call
+    // First field is Call
 
-	if (ConvToAX25(ptr, axptr) == 0)
-		return FALSE;
+    if (ConvToAX25(ptr, axptr) == 0)
+        return FALSE;
 
-	axptr += 7;
+    axptr += 7;
 
-	ptr = strtok_s(NULL, " ,", &Context);
+    ptr = strtok_s(NULL, " ,", &Context);
 
-	if (ConvToAX25(ptr, axptr) == 0)
-		return FALSE;
+    if (ConvToAX25(ptr, axptr) == 0)
+        return FALSE;
 
-	axptr += 7;
+    axptr += 7;
 
-	ptr = strtok_s(NULL, " ,", &Context);
+    ptr = strtok_s(NULL, " ,", &Context);
 
-	while (ptr && n--)
-	{
-		// NEXT FIELD = COULD BE CALLSIGN, VIA, 
+    while (ptr && n--)
+    {
+        // NEXT FIELD = COULD BE CALLSIGN, VIA,
 
-		if (memcmp(ptr, "VIA", (int)strlen(ptr)) == 0)
-		{
-		}	//skip via
-		else
-		{
-			// Convert next digi
+        if (memcmp(ptr, "VIA", (int)strlen(ptr)) == 0)
+        {
+        }	//skip via
+        else
+        {
+            // Convert next digi
 
-			if (ConvToAX25(ptr, axptr) == 0)
-				return FALSE;
+            if (ConvToAX25(ptr, axptr) == 0)
+                return FALSE;
 
-			axptr += 7;
-		}
+            axptr += 7;
+        }
 
-		ptr = strtok_s(NULL, " ,", &Context);
-	}
+        ptr = strtok_s(NULL, " ,", &Context);
+    }
 
-	axptr[-1] |= 1;			// Set end of address
+    axptr[-1] |= 1;			// Set end of address
 
-	return axptr - AXCalls;
+    return axptr - AXCalls;
 }
 
 Byte set_ctrl(Byte nr, Byte ns, Byte f_type, Byte f_id, boolean pf)
 {
-	Byte  pf_bit, ctrl;
+    Byte  pf_bit, ctrl;
 
-	ctrl = 0;
-	pf_bit = 0;
+    ctrl = 0;
+    pf_bit = 0;
 
-	if (pf)
-		pf_bit = 16;
+    if (pf)
+        pf_bit = 16;
 
-	switch (f_type)
-	{
-	case I_FRM:
+    switch (f_type)
+    {
+    case I_FRM:
 
-		ctrl = (nr << 5) + pf_bit + (ns << 1);
-		break;
+        ctrl = (nr << 5) + pf_bit + (ns << 1);
+        break;
 
-	case S_FRM:
+    case S_FRM:
 
-		ctrl = (nr << 5) + pf_bit + f_id;
-		break;
+        ctrl = (nr << 5) + pf_bit + f_id;
+        break;
 
-	case U_FRM:
+    case U_FRM:
 
-		ctrl = f_id + pf_bit;
-	}
+        ctrl = f_id + pf_bit;
+    }
 
-	return ctrl;
+    return ctrl;
 }
 
 string * make_frame(string * data, Byte * axaddr,  Byte pid, Byte nr, Byte ns, Byte f_type, Byte f_id, boolean rpr, boolean pf, boolean cr)
 {
-	UNUSED(rpr);
+    UNUSED(rpr);
 
-	Byte ctrl;
+    Byte ctrl;
 
-	string * frame = newString();
-	int addrlen;
-	Byte addr[80];
+    string * frame = newString();
+    int addrlen;
+    Byte addr[80];
 
-	unsigned short CRC;
-	UCHAR CRCString[2];
+    unsigned short CRC;
+    UCHAR CRCString[2];
 
-	frame->Data[0] = 0;					// Lower software expects a kiss control byte here
-	frame->Length = 1;
+    frame->Data[0] = 0;					// Lower software expects a kiss control byte here
+    frame->Length = 1;
 
-	ctrl = set_ctrl(nr, ns, f_type, f_id, pf);
+    ctrl = set_ctrl(nr, ns, f_type, f_id, pf);
 
-	addrlen = strlen((char *)axaddr);
+    addrlen = strlen((char *)axaddr);
 
-	memcpy(addr, axaddr, addrlen);
+    memcpy(addr, axaddr, addrlen);
 
-	if (cr)
-		addr[6] |= 0x80;		// Set Command Bit
-	else
-		addr[13] |= 0x80;	// Set Response Bit
-
-
-	switch (f_type)
-	{
-	case I_FRM:
-
-		stringAdd(frame, addr, addrlen);
-		stringAdd(frame, (Byte *)&ctrl, 1);
-		stringAdd(frame, (Byte *)&pid, 1);
-		stringAdd(frame, data->Data, data->Length);
-
-		break;
+    if (cr)
+        addr[6] |= 0x80;		// Set Command Bit
+    else
+        addr[13] |= 0x80;	// Set Response Bit
 
 
-	case S_FRM:
+    switch (f_type)
+    {
+    case I_FRM:
 
-		stringAdd(frame, addr, addrlen);
-		stringAdd(frame, (Byte *)&ctrl, 1);
+        stringAdd(frame, addr, addrlen);
+        stringAdd(frame, (Byte *)&ctrl, 1);
+        stringAdd(frame, (Byte *)&pid, 1);
+        stringAdd(frame, data->Data, data->Length);
 
-		break;
+        break;
 
-	case U_FRM:
 
-		if (f_id == U_UI)
-		{
-			stringAdd(frame, addr, addrlen);
-			stringAdd(frame, (Byte *)&ctrl, 1);
-			stringAdd(frame, (Byte *)&pid, 1);
-			stringAdd(frame, data->Data, data->Length);
-		}
-		else if (f_id == U_FRMR)
-		{
-			stringAdd(frame, addr, addrlen);
-			stringAdd(frame, (Byte *)&ctrl, 1);
-			stringAdd(frame, data->Data, data->Length);
-		}
-		else
-		{
-			stringAdd(frame, addr, addrlen);
-			stringAdd(frame, (Byte *)&ctrl, 1);
-		}
-	}
+    case S_FRM:
 
-	CRC = get_fcs(&frame->Data[1], frame->Length - 1);
+        stringAdd(frame, addr, addrlen);
+        stringAdd(frame, (Byte *)&ctrl, 1);
 
-	CRCString[0] = CRC & 0xff;
-	CRCString[1] = CRC >> 8;
-	stringAdd(frame, CRCString, 2);
+        break;
 
-	return frame;
+    case U_FRM:
+
+        if (f_id == U_UI)
+        {
+            stringAdd(frame, addr, addrlen);
+            stringAdd(frame, (Byte *)&ctrl, 1);
+            stringAdd(frame, (Byte *)&pid, 1);
+            stringAdd(frame, data->Data, data->Length);
+        }
+        else if (f_id == U_FRMR)
+        {
+            stringAdd(frame, addr, addrlen);
+            stringAdd(frame, (Byte *)&ctrl, 1);
+            stringAdd(frame, data->Data, data->Length);
+        }
+        else
+        {
+            stringAdd(frame, addr, addrlen);
+            stringAdd(frame, (Byte *)&ctrl, 1);
+        }
+    }
+
+    CRC = get_fcs(&frame->Data[1], frame->Length - 1);
+
+    CRCString[0] = CRC & 0xff;
+    CRCString[1] = CRC >> 8;
+    stringAdd(frame, CRCString, 2);
+
+    return frame;
 }
 
 
 int add_raw_frames(int snd_ch, string * frame, TStringList * buf)
 {
-	string  *s_data = newString();
-	Byte  s_pid, s_nr, s_ns, s_f_type, s_f_id;
-	Byte  s_rpt, s_cr, s_pf;
-	string  *d_data = newString();
-	Byte  d_pid, d_nr, d_ns, d_f_type, d_f_id;
-	Byte  d_rpt, d_cr, d_pf;
+    UNUSED(snd_ch);
+    string  *s_data = newString();
+    Byte  s_pid, s_nr, s_ns, s_f_type, s_f_id;
+    Byte  s_rpt, s_cr, s_pf;
+    string  *d_data = newString();
+    Byte  d_pid, d_nr, d_ns, d_f_type, d_f_id;
+    Byte  d_rpt, d_cr, d_pf;
 
-	Byte d_path[80];
-	Byte s_path[80];
+    Byte d_path[80];
+    Byte s_path[80];
 
-	boolean  found_I;
-	int  i;
+    boolean  found_I;
+    int  i;
 
-	unsigned char * framecontents;
-	int Length;
+    unsigned char * framecontents;
+    int Length;
 
-	boolean result = TRUE;
+    boolean result = TRUE;
 
-	// Have to be careful as at this point frames have KISS Header and maybe trailer
+    // Have to be careful as at this point frames have KISS Header and maybe trailer
 
-	if (buf->Count > 0)
-	{
-		// Check for duplicate. Ok to just compare as copy will have same header
+    if (buf->Count > 0)
+    {
+        // Check for duplicate. Ok to just compare as copy will have same header
 
-		if (my_indexof(buf, frame) >= 0)
-		{
-			Debugprintf("KISSOptimise discarding duplicate frame");
-			return FALSE;
-		}
+        if (my_indexof(buf, frame) >= 0)
+        {
+            Debugprintf("KISSOptimise discarding duplicate frame");
+            return FALSE;
+        }
 
-		// Need to adjust for KISS bytes
+        // Need to adjust for KISS bytes
 
-		// Normally one, but ackmode has 3 on front and sizeof(void *) on end
+        // Normally one, but ackmode has 3 on front and sizeof(void *) on end
 
-		framecontents = frame->Data;
-		Length = frame->Length;
+        framecontents = frame->Data;
+        Length = frame->Length;
 
-		if ((framecontents[0] & 15) == 12)		// Ackmode
-		{
-			framecontents += 3;
-			Length -= (3 + sizeof(void *));
-		}
-		else
-		{
-			framecontents++;
-			Length--;
-		}
+        if ((framecontents[0] & 15) == 12)		// Ackmode
+        {
+            framecontents += 3;
+            Length -= (3 + sizeof(void *));
+        }
+        else
+        {
+            framecontents++;
+            Length--;
+        }
 
-		decode_frame(framecontents, Length, s_path, s_data, &s_pid, &s_nr, &s_ns, &s_f_type, &s_f_id, &s_rpt, &s_pf, &s_cr);
+        decode_frame(framecontents, Length, s_path, s_data, &s_pid, &s_nr, &s_ns, &s_f_type, &s_f_id, &s_rpt, &s_pf, &s_cr);
 
-		found_I = FALSE;
+        found_I = FALSE;
 
-		// check for multiple RR (r)
+        // check for multiple RR (r)
 
-		if (s_f_id == S_FRM && s_cr == SET_R)
-		{
-			for (i = 0; i < buf->Count; i++)
-			{
-				framecontents = buf->Items[i]->Data;
-				Length = buf->Items[i]->Length;
+        if (s_f_id == S_FRM && s_cr == SET_R)
+        {
+            for (i = 0; i < buf->Count; i++)
+            {
+                framecontents = buf->Items[i]->Data;
+                Length = buf->Items[i]->Length;
 
-				if ((framecontents[0] & 15) == 12)		// Ackmode
-				{
-					framecontents += 3;
-					Length -= (3 + sizeof(void *));
-				}
-				else
-				{
-					framecontents++;
-					Length--;
-				}
+                if ((framecontents[0] & 15) == 12)		// Ackmode
+                {
+                    framecontents += 3;
+                    Length -= (3 + sizeof(void *));
+                }
+                else
+                {
+                    framecontents++;
+                    Length--;
+                }
 
-				decode_frame(framecontents, Length, d_path, d_data, &d_pid, &d_nr, &d_ns, &d_f_type, &d_f_id, &d_rpt, &d_pf, &d_cr);
+                decode_frame(framecontents, Length, d_path, d_data, &d_pid, &d_nr, &d_ns, &d_f_type, &d_f_id, &d_rpt, &d_pf, &d_cr);
 
-				if (d_f_id == S_FRM && d_cr == SET_R && strcmp((char *)s_path, (char *)d_path) == 0)
-				{
-					Delete(buf, i);
-					Debugprintf("KISSOptimise discarding unneeded RR(R%d)", d_nr);
+                if (d_f_id == S_FRM && d_cr == SET_R && strcmp((char *)s_path, (char *)d_path) == 0)
+                {
+                    Delete(buf, i);
+                    Debugprintf("KISSOptimise discarding unneeded RR(R%d)", d_nr);
 
-					break;
-				}
-			}
-		}
+                    break;
+                }
+            }
+        }
 
-	
-		// check for RR after I Frame
-	
-		if (s_f_id == S_FRM && s_cr == SET_C)
-		{
-			for (i = 0; i < buf->Count; i++)
-			{
-				framecontents = buf->Items[i]->Data;
-				Length = buf->Items[i]->Length;
 
-				if ((framecontents[0] & 15) == 12)		// Ackmode
-				{
-					framecontents += 3;
-					Length -= (3 + sizeof(void *));
-				}
-				else
-				{
-					framecontents++;
-					Length--;
-				}
+        // check for RR after I Frame
 
-				decode_frame(framecontents, Length, d_path, d_data, &d_pid, &d_nr, &d_ns, &d_f_type, &d_f_id, &d_rpt, &d_pf, &d_cr);
+        if (s_f_id == S_FRM && s_cr == SET_C)
+        {
+            for (i = 0; i < buf->Count; i++)
+            {
+                framecontents = buf->Items[i]->Data;
+                Length = buf->Items[i]->Length;
 
-				if (d_f_id == I_FRM && strcmp((char *)s_path, (char *)d_path) == 0)
-				{
-					found_I = TRUE;
-					break;
-				}
-			}
+                if ((framecontents[0] & 15) == 12)		// Ackmode
+                {
+                    framecontents += 3;
+                    Length -= (3 + sizeof(void *));
+                }
+                else
+                {
+                    framecontents++;
+                    Length--;
+                }
 
-			if (found_I)
-			{
-				Debugprintf("KISSOptimise discarding unneeded RR(C %d) after I frame", s_nr);
-				result = FALSE;
-			}
-		}
-			
-		// check on I
+                decode_frame(framecontents, Length, d_path, d_data, &d_pid, &d_nr, &d_ns, &d_f_type, &d_f_id, &d_rpt, &d_pf, &d_cr);
 
-		if (s_f_id == I_FRM)
-		{
-			for (i = 0; i < buf->Count; i++)
-			{
-				framecontents = buf->Items[i]->Data;
-				Length = buf->Items[i]->Length;
+                if (d_f_id == I_FRM && strcmp((char *)s_path, (char *)d_path) == 0)
+                {
+                    found_I = TRUE;
+                    break;
+                }
+            }
 
-				if ((framecontents[0] & 15) == 12)		// Ackmode
-				{
-					framecontents += 3;
-					Length -= (3 + sizeof(void *));
-				}
-				else
-				{
-					framecontents++;
-					Length--;
-				}
+            if (found_I)
+            {
+                Debugprintf("KISSOptimise discarding unneeded RR(C %d) after I frame", s_nr);
+                result = FALSE;
+            }
+        }
 
-				decode_frame(framecontents, Length, d_path, d_data, &d_pid, &d_nr, &d_ns, &d_f_type, &d_f_id, &d_rpt, &d_pf, &d_cr);
+        // check on I
 
-				if (strcmp((char *)s_path, (char *)d_path) == 0 && d_f_id == S_FRM && d_cr == SET_C)
-				{
-					Delete(buf, i);
-					Debugprintf("KISSOptimise discarding unneeded RR(C %d)", d_nr);
-					i--;				// i was removed
-				}
-			}
-		}
-	}
+        if (s_f_id == I_FRM)
+        {
+            for (i = 0; i < buf->Count; i++)
+            {
+                framecontents = buf->Items[i]->Data;
+                Length = buf->Items[i]->Length;
 
-	freeString(d_data);
-	freeString(s_data);
+                if ((framecontents[0] & 15) == 12)		// Ackmode
+                {
+                    framecontents += 3;
+                    Length -= (3 + sizeof(void *));
+                }
+                else
+                {
+                    framecontents++;
+                    Length--;
+                }
 
-	return result;
+                decode_frame(framecontents, Length, d_path, d_data, &d_pid, &d_nr, &d_ns, &d_f_type, &d_f_id, &d_rpt, &d_pf, &d_cr);
+
+                if (strcmp((char *)s_path, (char *)d_path) == 0 && d_f_id == S_FRM && d_cr == SET_C)
+                {
+                    Delete(buf, i);
+                    Debugprintf("KISSOptimise discarding unneeded RR(C %d)", d_nr);
+                    i--;				// i was removed
+                }
+            }
+        }
+    }
+
+    freeString(d_data);
+    freeString(s_data);
+
+    return result;
 }
 
 //////////////////////// Register incoming callsign ////////////////////////////
@@ -1178,131 +1183,131 @@ int add_raw_frames(int snd_ch, string * frame, TStringList * buf)
 
 boolean add_incoming_mycalls(void * socket, char * src_call)
 {
-	registeredCalls * reg = malloc(sizeof(struct registeredCalls_t));
-	int i = 0;
+    registeredCalls * reg = malloc(sizeof(struct registeredCalls_t));
+    int i = 0;
 
-	// Build a string containing Call and Socket
+    // Build a string containing Call and Socket
 
-	ConvToAX25(src_call, reg->myCall);
-	reg->socket = socket;
+    ConvToAX25(src_call, reg->myCall);
+    reg->socket = socket;
 
-	if (list_incoming_mycalls.Count > 0)
-	{
-		for (i = 0; i < list_incoming_mycalls.Count; i++)
-		{
-			registeredCalls * check = (registeredCalls *)list_incoming_mycalls.Items[i];
+    if (list_incoming_mycalls.Count > 0)
+    {
+        for (i = 0; i < list_incoming_mycalls.Count; i++)
+        {
+            registeredCalls * check = (registeredCalls *)list_incoming_mycalls.Items[i];
 
-			if (memcmp(check->myCall, reg->myCall, 7) == 0)
-			{
-				// Update socket
+            if (memcmp(check->myCall, reg->myCall, 7) == 0)
+            {
+                // Update socket
 
-				check->socket = socket;
-				return FALSE;
-			}
-		}
-	}
+                check->socket = socket;
+                return FALSE;
+            }
+        }
+    }
 
-	Add(&list_incoming_mycalls, (string *)reg);
-	return TRUE;
+    Add(&list_incoming_mycalls, (string *)reg);
+    return TRUE;
 }
 
 
 
 void del_incoming_mycalls(char * src_call)
 {
-	int i = 0;
-	Byte axcall[7];
-	registeredCalls * reg;
+    int i = 0;
+    Byte axcall[7];
+    registeredCalls * reg;
 
-	ConvToAX25(src_call, axcall);
+    ConvToAX25(src_call, axcall);
 
-	while (i < list_incoming_mycalls.Count)
-	{
-		reg = (registeredCalls *)list_incoming_mycalls.Items[i];
-		{
-			if (memcmp(reg->myCall, axcall, 7) == 0)
-			{
-				// cant use Delete as stringlist doesn't contain strings
+    while (i < list_incoming_mycalls.Count)
+    {
+        reg = (registeredCalls *)list_incoming_mycalls.Items[i];
+        {
+            if (memcmp(reg->myCall, axcall, 7) == 0)
+            {
+                // cant use Delete as stringlist doesn't contain strings
 
-				TStringList * Q = &list_incoming_mycalls;
-				int Index = i;
+                TStringList * Q = &list_incoming_mycalls;
+                int Index = i;
 
-				free(Q->Items[Index]);
+                free(Q->Items[Index]);
 
-				Q->Count--;
+                Q->Count--;
 
-				while (Index < Q->Count)
-				{
-					Q->Items[Index] = Q->Items[Index + 1];
-					Index++;
-				}
+                while (Index < Q->Count)
+                {
+                    Q->Items[Index] = Q->Items[Index + 1];
+                    Index++;
+                }
 
-				return;
-			}
-		}
-		i++;
-	}
+                return;
+            }
+        }
+        i++;
+    }
 }
 
 
 void del_incoming_mycalls_by_sock(void * socket)
 {
-	int i = 0, snd_ch, port;
-	registeredCalls * reg;
+    int i = 0, snd_ch, port;
+    registeredCalls * reg;
 
-	while (i < list_incoming_mycalls.Count)
-	{
-		reg = (registeredCalls *)list_incoming_mycalls.Items[i];
-		{
-			if (reg->socket == socket)
-			{
-				// cant use Delete as stringlist doesn't contain strings
+    while (i < list_incoming_mycalls.Count)
+    {
+        reg = (registeredCalls *)list_incoming_mycalls.Items[i];
+        {
+            if (reg->socket == socket)
+            {
+                // cant use Delete as stringlist doesn't contain strings
 
-				TStringList * Q = &list_incoming_mycalls;
-				int Index = i; 
-		
-				free(Q->Items[Index]);
+                TStringList * Q = &list_incoming_mycalls;
+                int Index = i;
 
-				Q->Count--;
+                free(Q->Items[Index]);
 
-				while (Index < Q->Count)
-				{
-					Q->Items[Index] = Q->Items[Index + 1];
-					Index++;
-				}
-				
-				//Delete(&list_incoming_mycalls, i);
-			}
-			else
-				i++;
-		}
-	}
+                Q->Count--;
 
-	// Should clear all connections on socket
+                while (Index < Q->Count)
+                {
+                    Q->Items[Index] = Q->Items[Index + 1];
+                    Index++;
+                }
 
-	for (snd_ch = 0; snd_ch < 4; snd_ch++)
-	{
-		for (port = 0; port < port_num; port++)
-		{
-			TAX25Port * AX25Sess = &AX25Port[snd_ch][port];
+                //Delete(&list_incoming_mycalls, i);
+            }
+            else
+                i++;
+        }
+    }
 
-			if (AX25Sess->socket == socket)
-			{
-				if (AX25Sess->status != STAT_NO_LINK)
-				{
-					// Shouldn't we send DM? -0 try it
+    // Should clear all connections on socket
 
-					set_DM(snd_ch, AX25Sess->ReversePath);
+    for (snd_ch = 0; snd_ch < 4; snd_ch++)
+    {
+        for (port = 0; port < port_num; port++)
+        {
+            TAX25Port * AX25Sess = &AX25Port[snd_ch][port];
 
-					rst_timer(AX25Sess);
-					rst_values(AX25Sess);
+            if (AX25Sess->socket == socket)
+            {
+                if (AX25Sess->status != STAT_NO_LINK)
+                {
+                    // Shouldn't we send DM? -0 try it
 
-					AX25Sess->status = STAT_NO_LINK;
-				}
-				AX25Sess->socket = 0;
-			}
-		}
-	}
+                    set_DM(snd_ch, AX25Sess->ReversePath);
+
+                    rst_timer(AX25Sess);
+                    rst_values(AX25Sess);
+
+                    AX25Sess->status = STAT_NO_LINK;
+                }
+                AX25Sess->socket = 0;
+            }
+        }
+    }
 }
 
 
@@ -1323,9 +1328,9 @@ begin
   if a_call[1]<>'' then ssid:=a_call[1] else ssid:='0';
   if list_incoming_mycalls.Count>0 then
   repeat
-	if (call+'-'+ssid)=list_incoming_mycalls.Strings[i] then
-	begin socket:=strtoint(list_incoming_mycalls_sock.Strings[i]); found:=TRUE; end;
-	inc(i);
+    if (call+'-'+ssid)=list_incoming_mycalls.Strings[i] then
+    begin socket:=strtoint(list_incoming_mycalls_sock.Strings[i]); found:=TRUE; end;
+    inc(i);
   until found or (i=list_incoming_mycalls.Count);
   result:=socket;
 end;
@@ -1335,22 +1340,22 @@ end;
 
 void * in_list_incoming_mycall(Byte * path)
 {
-	// See if to call is in registered calls list
+    // See if to call is in registered calls list
 
-	int i = 0;
-	registeredCalls * check;		// list_incoming_mycalls contains registeredCalls, not Strings
-	
-	while (i < list_incoming_mycalls.Count)
-	{
-		check = (registeredCalls *)list_incoming_mycalls.Items[i];
+    int i = 0;
+    registeredCalls * check;		// list_incoming_mycalls contains registeredCalls, not Strings
 
-		if (memcmp(check->myCall, path, 7) == 0)
-			return check->socket;
+    while (i < list_incoming_mycalls.Count)
+    {
+        check = (registeredCalls *)list_incoming_mycalls.Items[i];
 
-		i++;
-	}
+        if (memcmp(check->myCall, path, 7) == 0)
+            return check->socket;
 
-	return NULL;
+        i++;
+    }
+
+    return NULL;
 }
 
 /*
@@ -1385,16 +1390,16 @@ begin
   digi:='';
   if length(path)>14 then
   begin
-	delete(path,1,14);
-	repeat
-	  call:=trim(copy(path,1,6));
-	  ssid:=copy(path,7,1);
-	  delete(path,1,7);
-	  if ssid<>'' then ssid:=inttostr((ord(ssid[1]) and 15))
-	  else ssid:='0';
-	  if path<>'' then digi:=digi+call+'-'+ssid+','
-	  else digi:=digi+call+'-'+ssid;
-	until path='';
+    delete(path,1,14);
+    repeat
+      call:=trim(copy(path,1,6));
+      ssid:=copy(path,7,1);
+      delete(path,1,7);
+      if ssid<>'' then ssid:=inttostr((ord(ssid[1]) and 15))
+      else ssid:='0';
+      if path<>'' then digi:=digi+call+'-'+ssid+','
+      else digi:=digi+call+'-'+ssid;
+    until path='';
   end;
   if digi=AX25Sess->digi then result:=TRUE else result:=FALSE;
 end;
@@ -1404,15 +1409,15 @@ end;
 
 boolean is_last_digi(Byte *path)
 {
-	int len = strlen(path);
+    int len = strlen((const char *)path);
 
-	if (len == 14)
-		return TRUE;
+    if (len == 14)
+        return TRUE;
 
-	if ((path[len - 1] & 128) == 128)
-		return TRUE;
+    if ((path[len - 1] & 128) == 128)
+        return TRUE;
 
-	return FALSE;
+    return FALSE;
 }
 
 
@@ -1447,16 +1452,16 @@ begin
   digi:='';
   if length(path)>14 then
   begin
-	delete(path,1,14);
-	repeat
-	  call:=trim(copy(path,1,6));
-	  ssid:=copy(path,7,1);
-	  delete(path,1,7);
-	  if ssid<>'' then ssid:=inttostr((ord(ssid[1]) and 15))
-	  else ssid:='0';
-	  if path<>'' then digi:=digi+call+'-'+ssid+','
-	  else digi:=digi+call+'-'+ssid;
-	until path='';
+    delete(path,1,14);
+    repeat
+      call:=trim(copy(path,1,6));
+      ssid:=copy(path,7,1);
+      delete(path,1,7);
+      if ssid<>'' then ssid:=inttostr((ord(ssid[1]) and 15))
+      else ssid:='0';
+      if path<>'' then digi:=digi+call+'-'+ssid+','
+      else digi:=digi+call+'-'+ssid;
+    until path='';
   end;
   result:=digi;
 end;
@@ -1464,70 +1469,73 @@ end;
 
 boolean is_correct_path(Byte * path, Byte pid)
 {
-	Byte networks[] = { 6, 7, 8, 0xc4, 0xcc, 0xcd, 0xce, 0xcf, 0xf0 , 0 };
-	Byte call[10];
-	int i;
+    Byte networks[] = { 6, 7, 8, 0xc4, 0xcc, 0xcd, 0xce, 0xcf, 0xf0 , 0 };
+    Byte call[10];
+    UNUSED(call);
+    int i;
 
 
-	if (pid == 0 || strchr(networks, pid))
-	{
-		// Validate calls
+    if (pid == 0 || strchr((const char *)networks, pid))
+    {
+        // Validate calls
 
-		// I think checking bottom  bit of first 13 bytes is enough
+        // I think checking bottom  bit of first 13 bytes is enough
 
-		for (i = 0; i < 13; i++)
-		{
-			if ((*(path) & 1))
-				return FALSE;
+        for (i = 0; i < 13; i++)
+        {
+            if ((*(path) & 1))
+                return FALSE;
 
-			path++;
-		}
-		return TRUE;
-	}
-	return FALSE;
+            path++;
+        }
+        return TRUE;
+    }
+    return FALSE;
 }
 
 
 void get_exclude_list(char * line, TStringList * list)
 {
-	// Convert comma separated list of calls to ax25 format in list
+    // Convert comma separated list of calls to ax25 format in list
 
-	string axcall;
+    string axcall;
 
-	char copy[512];
+    char copy[512];
 
-	char * ptr, *Context;
+    char * ptr, *Context;
 
-	if (line[0] == 0)
-		return;
+    if (line[0] == 0)
+        return;
 
-	strcpy(copy, line);						// copy as strtok messes with it
-	strcat(copy, ",");
+    strcpy(copy, line);						// copy as strtok messes with it
+    strcat(copy, ",");
 
-	axcall.Length = 8;
-	axcall.AllocatedLength = 8;
-	axcall.Data = malloc(8);
+    axcall.Length = 8;
+    axcall.AllocatedLength = 8;
+    axcall.Data = malloc(8);
 
-	memset(axcall.Data, 0, 8);
+    memset(axcall.Data, 0, 8);
 
-	ptr = strtok_s(copy, " ,", &Context);
+    ptr = strtok_s(copy, " ,", &Context);
 
-	while (ptr)
-	{
-		if (ConvToAX25(ptr, axcall.Data) == 0)
-			return;
+    while (ptr)
+    {
+        if (ConvToAX25(ptr, axcall.Data) == 0)
+            return;
 
-		Add(list, duplicateString(&axcall));
+        Add(list, duplicateString(&axcall));
 
-		ptr = strtok_s(NULL, " ,", &Context);
-	}
+        ptr = strtok_s(NULL, " ,", &Context);
+    }
 }
 
 
 
 void get_exclude_frm(char * line, TStringList * list)
 {
-	/*
+    UNUSED(list);
+    UNUSED(line);;
+    /*
 
   s: string;
   p: integer;
@@ -1536,26 +1544,26 @@ begin
   list.Clear;
   if line='' then exit;
   repeat
-	p:=pos(',',line);
-	if p>0 then
-	  begin
-		s:=trim(copy(line,1,p-1));
-		if s<>'' then
-		begin
-		  try n:=strtoint(s); except n:=-1; end;
-		  if n in [0..255] then list.Add(chr(n));
-		end;
-		delete(line,1,p);
-	  end
-	else
-	  begin
-		s:=trim(line);
-		if s<>'' then
-		begin
-		  try n:=strtoint(s); except n:=-1; end;
-		  if n in [0..255] then list.Add(chr(n));
-		end;
-	  end;
+    p:=pos(',',line);
+    if p>0 then
+      begin
+        s:=trim(copy(line,1,p-1));
+        if s<>'' then
+        begin
+          try n:=strtoint(s); except n:=-1; end;
+          if n in [0..255] then list.Add(chr(n));
+        end;
+        delete(line,1,p);
+      end
+    else
+      begin
+        s:=trim(line);
+        if s<>'' then
+        begin
+          try n:=strtoint(s); except n:=-1; end;
+          if n in [0..255] then list.Add(chr(n));
+        end;
+      end;
   until p=0;
 end;
 */
@@ -1572,11 +1580,11 @@ begin
   excluded:=FALSE;
   if (list_exclude_callsigns[snd_ch].Count>0) and (length(path)>13) then
   begin
-	// Copy sender
-	call:=trim(copy(path,8,6));
-	ssid:=copy(path,14,1);
-	if ssid<>'' then call:=call+'-'+inttostr((ord(ssid[1]) and 15));
-	if list_exclude_callsigns[snd_ch].IndexOf(call)>-1 then excluded:=TRUE;
+    // Copy sender
+    call:=trim(copy(path,8,6));
+    ssid:=copy(path,14,1);
+    if ssid<>'' then call:=call+'-'+inttostr((ord(ssid[1]) and 15));
+    if list_exclude_callsigns[snd_ch].IndexOf(call)>-1 then excluded:=TRUE;
   end;
   result:=excluded;
 end;
@@ -1587,9 +1595,9 @@ var
 begin
   excluded:=FALSE;
   if list_exclude_APRS_frm[snd_ch].Count>0 then
-	if f_id=U_UI then
-	  if length(data)>0 then
-		if list_exclude_APRS_frm[snd_ch].IndexOf(data[1])>=0 then excluded:=TRUE;
+    if f_id=U_UI then
+      if length(data)>0 then
+        if list_exclude_APRS_frm[snd_ch].IndexOf(data[1])>=0 then excluded:=TRUE;
   result:=excluded;
 end;
 
@@ -1622,16 +1630,16 @@ begin
   digi:='';
   if length(path)>14 then
   begin
-	delete(path,1,14);
-	repeat
-	  call:=trim(copy(path,1,6));
-	  ssid:=copy(path,7,1);
-	  delete(path,1,7);
-	  if ssid<>'' then ssid:=inttostr((ord(ssid[1]) and 15))
-	  else ssid:='0';
-	  if path<>'' then digi:=digi+call+'-'+ssid+','
-	  else digi:=digi+call+'-'+ssid;
-	until path='';
+    delete(path,1,14);
+    repeat
+      call:=trim(copy(path,1,6));
+      ssid:=copy(path,7,1);
+      delete(path,1,7);
+      if ssid<>'' then ssid:=inttostr((ord(ssid[1]) and 15))
+      else ssid:='0';
+      if path<>'' then digi:=digi+call+'-'+ssid+','
+      else digi:=digi+call+'-'+ssid;
+    until path='';
   end;
   AX25Sess->digi:=digi;
 end;
@@ -1661,42 +1669,45 @@ end;
 
 int number_digi(string path)
 {
-	int n = 0;
+    int n = 0;
 
-	//  a_path: array [0..ADDR_MAX_LEN-3] of string;
-	int i;
+    //  a_path: array [0..ADDR_MAX_LEN-3] of string;
+    int i;
+    UNUSED(path);
+    UNUSED(i);
 
-	// for i:=0 to ADDR_MAX_LEN-3 do a_path[i]:='';
-	// try explode(a_path,',',path,ADDR_MAX_LEN-2); except end;
-	// for i:=0 to ADDR_MAX_LEN-3 do if a_path[i]<>'' then inc(n);
+    // for i:=0 to ADDR_MAX_LEN-3 do a_path[i]:='';
+    // try explode(a_path,',',path,ADDR_MAX_LEN-2); except end;
+    // for i:=0 to ADDR_MAX_LEN-3 do if a_path[i]<>'' then inc(n);
 
-	return n;
+    return n;
 }
 
 
 
-get_monitor_path(Byte * path, char * mycall, char * corrcall, char * digi)
+void get_monitor_path(Byte * path, char * mycall, char * corrcall, char * digi)
 {
-	Byte * digiptr = digi;
+    Byte * digiptr = (Byte *)digi;
 
-	digi[0] = 0;
+    digi[0] = 0;
 
-	mycall[ConvFromAX25(path, mycall)] = 0;
-	path += 7;
-	corrcall[ConvFromAX25(path, corrcall)] = 0;
+    mycall[ConvFromAX25(path, mycall)] = 0;
+    path += 7;
+    corrcall[ConvFromAX25(path, corrcall)] = 0;
 
-	while ((path[6] & 1) == 0)				// End of call bit
-	{
-		if (digi != digiptr)
-			*(digi++) = ',';
+    while ((path[6] & 1) == 0)				// End of call bit
+    {
+        if ((Byte *)digi != digiptr) {
+            *(digi++) = ',';
+        }
+        path += 7;
+        digi += ConvFromAX25(path, digi);
 
-			path += 7;
-			digi += ConvFromAX25(path, digi);
-
-			if (((path[6] & 128) == 128))		// Digi'd
-				*(digi++) = '*';
-	}
-	*digi = 0;
+        if (((path[6] & 128) == 128)) {		// Digi'd
+            *(digi++) = '*';
+        }
+    }
+    *digi = 0;
 }
 
 
@@ -1714,8 +1725,8 @@ begin
   for i:=0 to ADDR_MAX_LEN-3 do
   if a_path[i]<>'' then
   begin
-	if digi='' then digi:=a_path[i]+digi
-	else digi:=a_path[i]+','+digi;
+    if digi='' then digi:=a_path[i]+digi
+    else digi:=a_path[i]+','+digi;
   end;
   result:=digi;
 end;
@@ -1726,12 +1737,12 @@ var
 begin
   s:='';
   repeat
-	call:=copy(path,1,6);
-	delete(path,1,6);
-	ssid:=copy(path,1,1);
-	delete(path,1,1);
-	if ssid<>'' then ssid:=inttostr((ord(ssid[1]) and 15));
-	if s='' then s:=call+'-'+ssid else s:=s+','+call+'-'+ssid;
+    call:=copy(path,1,6);
+    delete(path,1,6);
+    ssid:=copy(path,1,1);
+    delete(path,1,1);
+    if ssid<>'' then ssid:=inttostr((ord(ssid[1]) and 15));
+    if s='' then s:=call+'-'+ssid else s:=s+','+call+'-'+ssid;
   until path='';
   result:=s;
 end;
@@ -1739,236 +1750,236 @@ end;
 
 void reverse_addr(Byte * path, Byte * revpath, int Len)
 {
-	Byte * ptr = path;
-	Byte * copy = revpath;
-	int endbit = Len - 1;
-	int numdigis = (Len - 14) / 7;
-	int i;
+    Byte * ptr = path;
+    Byte * copy = revpath;
+    int endbit = Len - 1;
+    int numdigis = (Len - 14) / 7;
+    int i;
 
-	if (Len < 14)
-		return;
+    if (Len < 14)
+        return;
 
-	Byte digis[57];						// 8 * 7 + null terminator
-	memset(digis, 0, 57);
-	Byte * digiptr = digis + 49;			// Last Digi
+    Byte digis[57];						// 8 * 7 + null terminator
+    memset(digis, 0, 57);
+    Byte * digiptr = digis + 49;			// Last Digi
 
-	// remove end of address bit
+    // remove end of address bit
 
-	path[endbit] &= 0xFE;
+    path[endbit] &= 0xFE;
 
-	// first reverse dest and origin
+    // first reverse dest and origin
 
-	memcpy(copy + 7, ptr, 7);
-	memcpy(copy, ptr + 7, 7);
+    memcpy(copy + 7, ptr, 7);
+    memcpy(copy, ptr + 7, 7);
 
-	Len -= 14;
-	ptr += 14;
+    Len -= 14;
+    ptr += 14;
 
-	for (i = 0; i < numdigis; i++)
-	{
-		memcpy(digiptr, ptr, 7);
-		ptr += 7;
-		digiptr -= 7;
-	}
+    for (i = 0; i < numdigis; i++)
+    {
+        memcpy(digiptr, ptr, 7);
+        ptr += 7;
+        digiptr -= 7;
+    }
 
-	// Digiptr now points to new first digi 
+    // Digiptr now points to new first digi
 
-	memcpy(&copy[14], &digiptr[7], 7 * numdigis);
+    memcpy(&copy[14], &digiptr[7], 7 * numdigis);
 
-	path[endbit] |= 1;			// restore original end bit
+    path[endbit] |= 1;			// restore original end bit
 
-	copy[endbit++] |= 1;
-	copy[endbit] = 0;			//  Null terminate
+    copy[endbit++] |= 1;
+    copy[endbit] = 0;			//  Null terminate
 
-	return;
+    return;
 }
 
 
 
 void decode_frame(Byte * frame, int len, Byte * path, string * data,
-	Byte * pid, Byte * nr, Byte * ns, Byte * f_type, Byte * f_id,
-	Byte *  rpt, Byte * pf, Byte * cr)
+    Byte * pid, Byte * nr, Byte * ns, Byte * f_type, Byte * f_id,
+    Byte *  rpt, Byte * pf, Byte * cr)
 {
-	int i;
-	int addr_end;
-	Byte ctrl;
-	Byte * savepath = path;
+    int i;
+    int addr_end;
+    Byte ctrl;
+    Byte * savepath = path;
 
-	i = 0;
-	addr_end = FALSE;
+    i = 0;
+    addr_end = FALSE;
 
-	*cr = SET_R;
-	*pf = SET_F;
-	data->Length = 0;
-	ctrl = 0;
-	*pid = 0;
-	*nr = 0;
-	*ns = 0;
-	*f_type = 0;
-	*f_id = 0;
-	*rpt = FALSE;
+    *cr = SET_R;
+    *pf = SET_F;
+    data->Length = 0;
+    ctrl = 0;
+    *pid = 0;
+    *nr = 0;
+    *ns = 0;
+    *f_type = 0;
+    *f_id = 0;
+    *rpt = FALSE;
 
-	if (len < PKT_ERR)
-		return;
+    if (len < PKT_ERR)
+        return;
 
-	if ((frame[6] & 128) == 128 && (frame[13] & 128) == 0)
-		*cr = SET_C;
+    if ((frame[6] & 128) == 128 && (frame[13] & 128) == 0)
+        *cr = SET_C;
 
-	while (len > i && i < ADDR_MAX_LEN * 7)
-	{
-		*path++ = frame[i];
-		if ((frame[i] & 1) == 1)
-		{
-			addr_end = TRUE;
-			break;
-		}
-		i++;
-	}
+    while (len > i && i < ADDR_MAX_LEN * 7)
+    {
+        *path++ = frame[i];
+        if ((frame[i] & 1) == 1)
+        {
+            addr_end = TRUE;
+            break;
+        }
+        i++;
+    }
 
-	if (addr_end == 0)
-		return;
+    if (addr_end == 0)
+        return;
 
-	// clear the c and r bits from address
+    // clear the c and r bits from address
 
-	savepath[6] &= 0x7f;		// Mask 
-	savepath[13] &= 0x7f;		// Mask 
+    savepath[6] &= 0x7f;		// Mask
+    savepath[13] &= 0x7f;		// Mask
 
-	*path = 0;		// add null terminate		
+    *path = 0;		// add null terminate
 
-	i++;			// Points to ctrl byte
+    i++;			// Points to ctrl byte
 
-	ctrl = frame[i];
+    ctrl = frame[i];
 
-	if ((ctrl & 16) == 16)
-		*pf = SET_P;
+    if ((ctrl & 16) == 16)
+        *pf = SET_P;
 
-	if ((ctrl & 1) == 0)		// I frame
-	{
-		*f_type = I_FRM;
-		*f_id = I_I;
-		*nr = (ctrl >> 5);
-		*ns = (ctrl >> 1) & 7;
-	}
-	else
-	{
-		// Not I
+    if ((ctrl & 1) == 0)		// I frame
+    {
+        *f_type = I_FRM;
+        *f_id = I_I;
+        *nr = (ctrl >> 5);
+        *ns = (ctrl >> 1) & 7;
+    }
+    else
+    {
+        // Not I
 
-		*f_type = U_FRM;
+        *f_type = U_FRM;
 
-		*f_id = ctrl & 239;
+        *f_id = ctrl & 239;
 
-		switch (ctrl & 15)
-		{
-		case  S_RR:
-		case  S_RNR:
-		case  S_REJ:
-		case  S_SREJ:
+        switch (ctrl & 15)
+        {
+        case  S_RR:
+        case  S_RNR:
+        case  S_REJ:
+        case  S_SREJ:
 
-			*f_type = S_FRM;
-		}
+            *f_type = S_FRM;
+        }
 
-		if (*f_type == S_FRM)
-		{
-			*f_id = ctrl & 15;
-			*nr = ctrl >> 5;
-		}
-	}
+        if (*f_type == S_FRM)
+        {
+            *f_id = ctrl & 15;
+            *nr = ctrl >> 5;
+        }
+    }
 
 
-	if (*f_id == I_I || *f_id == U_UI)
-	{
-		i++;
-		*pid = frame[i];
-		i++;
-		if (len > i)
-			stringAdd(data, &frame[i], len - i - 2);		// Exclude FCS
-	}
-	else if (*f_id == U_FRMR)
-	{
-		*pid = 0;
-		i++;
-		if (len > i)
-			stringAdd(data, &frame[i], len - i - 2);		// Exclude FCS
-	}
+    if (*f_id == I_I || *f_id == U_UI)
+    {
+        i++;
+        *pid = frame[i];
+        i++;
+        if (len > i)
+            stringAdd(data, &frame[i], len - i - 2);		// Exclude FCS
+    }
+    else if (*f_id == U_FRMR)
+    {
+        *pid = 0;
+        i++;
+        if (len > i)
+            stringAdd(data, &frame[i], len - i - 2);		// Exclude FCS
+    }
 }
 void ax25_info_init(TAX25Port * AX25Sess)
 {
-	AX25Sess->info.stat_s_pkt = 0;
-	AX25Sess->info.stat_s_byte = 0;
-	AX25Sess->info.stat_r_pkt = 0;
-	AX25Sess->info.stat_r_byte = 0;
-	AX25Sess->info.stat_r_fc = 0;
-	AX25Sess->info.stat_fec_count = 0;
-	AX25Sess->info.stat_l_r_byte = 0;
-	AX25Sess->info.stat_l_s_byte = 0;
-	AX25Sess->info.stat_begin_ses = 0;
-	AX25Sess->info.stat_end_ses = 0;
+    AX25Sess->info.stat_s_pkt = 0;
+    AX25Sess->info.stat_s_byte = 0;
+    AX25Sess->info.stat_r_pkt = 0;
+    AX25Sess->info.stat_r_byte = 0;
+    AX25Sess->info.stat_r_fc = 0;
+    AX25Sess->info.stat_fec_count = 0;
+    AX25Sess->info.stat_l_r_byte = 0;
+    AX25Sess->info.stat_l_s_byte = 0;
+    AX25Sess->info.stat_begin_ses = 0;
+    AX25Sess->info.stat_end_ses = 0;
 }
 
 
 void  clr_frm_win(TAX25Port * AX25Sess)
 {
-	int  i;
+    int  i;
 
-	for (i = 0; i < 8; i++)
-		initString(&AX25Sess->frm_win[i]);
+    for (i = 0; i < 8; i++)
+        initString(&AX25Sess->frm_win[i]);
 }
 
 void ax25_init()
 {
-	int snd_ch, port, i;
+    int snd_ch, port, i;
 
-	for (i = 0; i < 4; i++)
-	{
-		initTStringList(&all_frame_buf[i]);
-		initTStringList(&list_exclude_callsigns[i]);
-		initTStringList(&list_exclude_APRS_frm[i]);
-		initTStringList(&list_digi_callsigns[i]);
-		initTStringList(&KISS_acked[i]);
+    for (i = 0; i < 4; i++)
+    {
+        initTStringList(&all_frame_buf[i]);
+        initTStringList(&list_exclude_callsigns[i]);
+        initTStringList(&list_exclude_APRS_frm[i]);
+        initTStringList(&list_digi_callsigns[i]);
+        initTStringList(&KISS_acked[i]);
 
-		get_exclude_list(MyDigiCall[i], &list_digi_callsigns[i]);
-		get_exclude_list(exclude_callsigns[i], &list_exclude_callsigns[i]);
-		get_exclude_frm(exclude_APRS_frm[i], &list_exclude_APRS_frm[i]);
+        get_exclude_list(MyDigiCall[i], &list_digi_callsigns[i]);
+        get_exclude_list(exclude_callsigns[i], &list_exclude_callsigns[i]);
+        get_exclude_frm(exclude_APRS_frm[i], &list_exclude_APRS_frm[i]);
 
-	}
+    }
 
-	initTStringList(&list_incoming_mycalls);
+    initTStringList(&list_incoming_mycalls);
 //	initTStringList(&list_incoming_mycalls_sock);
 
-	for (snd_ch = 0; snd_ch < 4; snd_ch++)
-	{
-		for (port = 0; port < port_num; port++)
-		{
-			TAX25Port * AX25Sess = &AX25Port[snd_ch][port];
+    for (snd_ch = 0; snd_ch < 4; snd_ch++)
+    {
+        for (port = 0; port < port_num; port++)
+        {
+            TAX25Port * AX25Sess = &AX25Port[snd_ch][port];
 
-			AX25Sess->hi_vs = 0;
-			AX25Sess->vs = 0;
-			AX25Sess->vr = 0;
-			AX25Sess->PID = PID_NO_L3;
-			initTStringList(&AX25Sess->in_data_buf);
-			initString(&AX25Sess->out_data_buf);
-			AX25Sess->t1 = 0;
-			AX25Sess->t2 = 0;
-			AX25Sess->t3 = 0;
-			AX25Sess->i_lo = 0;
-			AX25Sess->i_hi = 0;
-			AX25Sess->n1 = 0;
-			AX25Sess->n2 = 0;
-			AX25Sess->status = 0;
-			AX25Sess->clk_frack = 0;
-			initTStringList(&AX25Sess->frame_buf);
-			initTStringList(&AX25Sess->I_frame_buf);
-			initTStringList(&AX25Sess->frm_collector);
-			AX25Sess->corrcall[0] = 0;
-			AX25Sess->mycall[0] = 0;
-			AX25Sess->digi[0] = 0;
-			AX25Sess->Path[0] = 0;
-			AX25Sess->kind[0] = 0;
-			AX25Sess->socket = NULL;
-			ax25_info_init(AX25Sess);
-			clr_frm_win(AX25Sess);
-		}
-	}
+            AX25Sess->hi_vs = 0;
+            AX25Sess->vs = 0;
+            AX25Sess->vr = 0;
+            AX25Sess->PID = PID_NO_L3;
+            initTStringList(&AX25Sess->in_data_buf);
+            initString(&AX25Sess->out_data_buf);
+            AX25Sess->t1 = 0;
+            AX25Sess->t2 = 0;
+            AX25Sess->t3 = 0;
+            AX25Sess->i_lo = 0;
+            AX25Sess->i_hi = 0;
+            AX25Sess->n1 = 0;
+            AX25Sess->n2 = 0;
+            AX25Sess->status = 0;
+            AX25Sess->clk_frack = 0;
+            initTStringList(&AX25Sess->frame_buf);
+            initTStringList(&AX25Sess->I_frame_buf);
+            initTStringList(&AX25Sess->frm_collector);
+            AX25Sess->corrcall[0] = 0;
+            AX25Sess->mycall[0] = 0;
+            AX25Sess->digi[0] = 0;
+            AX25Sess->Path[0] = 0;
+            AX25Sess->kind[0] = 0;
+            AX25Sess->socket = NULL;
+            ax25_info_init(AX25Sess);
+            clr_frm_win(AX25Sess);
+        }
+    }
 }
 /*
 
@@ -1979,24 +1990,26 @@ begin
   for snd_ch:=1 to 4 do
   for port:=0 to port_num-1 do
   begin
-	AX25Sess->in_data_buf.Free;
-	AX25Sess->frame_buf.Free;
-	AX25Sess->I_frame_buf.Free;
-	AX25Sess->frm_collector.Free;
+    AX25Sess->in_data_buf.Free;
+    AX25Sess->frame_buf.Free;
+    AX25Sess->I_frame_buf.Free;
+    AX25Sess->frm_collector.Free;
   end;
   for i:=1 to 4 do
   begin
-	all_frame_buf[i].Free;
-	list_exclude_callsigns[i].Free;
-	list_exclude_APRS_frm[i].Free;
-	list_digi_callsigns[i].Free;
+    all_frame_buf[i].Free;
+    list_exclude_callsigns[i].Free;
+    list_exclude_APRS_frm[i].Free;
+    list_digi_callsigns[i].Free;
   end;
   list_incoming_mycalls.Free;
   list_incoming_mycalls_sock.Free;
 end;
 */
 void  write_ax25_info(TAX25Port * AX25Sess)
-{}
+{
+    UNUSED(AX25Sess);
+}
 
 /*var
   new: boolean;
@@ -2008,33 +2021,33 @@ void  write_ax25_info(TAX25Port * AX25Sess)
 begin
   if stat_log then
   begin
-	time_ses:=AX25Sess->info.stat_end_ses-AX25Sess->info.stat_begin_ses;
-	time_ses_sec:=time_ses*86400; //время сессии в секундах
-	if time_ses_sec<1 then exit;
-	mycall:=copy(AX25Sess->mycall+'         ',1,9);
-	call:=copy(AX25Sess->corrcall+'         ',1,9);
-	spkt:=copy(inttostr(AX25Sess->info.stat_s_pkt)+'         ',1,6);
-	sbyte:=copy(inttostr(AX25Sess->info.stat_s_byte)+'         ',1,9);
-	rpkt:=copy(inttostr(AX25Sess->info.stat_r_pkt)+'         ',1,6);
-	rbyte:=copy(inttostr(AX25Sess->info.stat_r_byte)+'         ',1,9);
-	rfc:=copy(inttostr(AX25Sess->info.stat_r_fc)+'         ',1,6);
-	tcps:=copy(inttostr(round(AX25Sess->info.stat_s_byte/time_ses_sec))+'         ',1,5);
-	rcps:=copy(inttostr(round(AX25Sess->info.stat_r_byte/time_ses_sec))+'         ',1,5);
-	acps:=copy(inttostr(round(AX25Sess->info.stat_s_byte/time_ses_sec+AX25Sess->info.stat_r_byte/time_ses_sec))+'         ',1,5);
-	timeses:=FormatDateTime('hh:mm:ss',time_ses);
-	startses:=FormatDateTime('dd-mm-yy hh:mm:ss',AX25Sess->info.stat_begin_ses);
-	s:=mycall+' '+call+' '+spkt+' '+sbyte+' '+rpkt+' '+rbyte+' '+rfc+' '+tcps+' '+rcps+' '+acps+' '+startses+' '+timeses;
-	assignfile(t,'log.txt');
-	if FileSearch('log.txt','')='' then new:=TRUE else new:=FALSE;
-	if new then
-	begin
-	  rewrite(t);
-	  writeln(t,'Mycall    CorrCall  TXPkt  TXByte    RXPkt  RXByte    FCPkt  TXCPS RXCPS T.CPS Begin session     SesTime');
-	  writeln(t,'--------  --------- ------ --------- ------ --------- ------ ----- ----- ----- ----------------- --------');
-	end
-	else append(t);
-	if (AX25Sess->info.stat_s_byte>0) or (AX25Sess->info.stat_r_byte>0) then writeln(t,s);
-	closefile(t);
+    time_ses:=AX25Sess->info.stat_end_ses-AX25Sess->info.stat_begin_ses;
+    time_ses_sec:=time_ses*86400; //????? ?????? ? ????????
+    if time_ses_sec<1 then exit;
+    mycall:=copy(AX25Sess->mycall+'         ',1,9);
+    call:=copy(AX25Sess->corrcall+'         ',1,9);
+    spkt:=copy(inttostr(AX25Sess->info.stat_s_pkt)+'         ',1,6);
+    sbyte:=copy(inttostr(AX25Sess->info.stat_s_byte)+'         ',1,9);
+    rpkt:=copy(inttostr(AX25Sess->info.stat_r_pkt)+'         ',1,6);
+    rbyte:=copy(inttostr(AX25Sess->info.stat_r_byte)+'         ',1,9);
+    rfc:=copy(inttostr(AX25Sess->info.stat_r_fc)+'         ',1,6);
+    tcps:=copy(inttostr(round(AX25Sess->info.stat_s_byte/time_ses_sec))+'         ',1,5);
+    rcps:=copy(inttostr(round(AX25Sess->info.stat_r_byte/time_ses_sec))+'         ',1,5);
+    acps:=copy(inttostr(round(AX25Sess->info.stat_s_byte/time_ses_sec+AX25Sess->info.stat_r_byte/time_ses_sec))+'         ',1,5);
+    timeses:=FormatDateTime('hh:mm:ss',time_ses);
+    startses:=FormatDateTime('dd-mm-yy hh:mm:ss',AX25Sess->info.stat_begin_ses);
+    s:=mycall+' '+call+' '+spkt+' '+sbyte+' '+rpkt+' '+rbyte+' '+rfc+' '+tcps+' '+rcps+' '+acps+' '+startses+' '+timeses;
+    assignfile(t,'log.txt');
+    if FileSearch('log.txt','')='' then new:=TRUE else new:=FALSE;
+    if new then
+    begin
+      rewrite(t);
+      writeln(t,'Mycall    CorrCall  TXPkt  TXByte    RXPkt  RXByte    FCPkt  TXCPS RXCPS T.CPS Begin session     SesTime');
+      writeln(t,'--------  --------- ------ --------- ------ --------- ------ ----- ----- ----- ----------------- --------');
+    end
+    else append(t);
+    if (AX25Sess->info.stat_s_byte>0) or (AX25Sess->info.stat_r_byte>0) then writeln(t,s);
+    closefile(t);
   end;
 end;
 
@@ -2094,35 +2107,35 @@ along with LinBPQ/BPQ32.  If not, see http://www.gnu.org/licenses
 DllExport int APIENTRY SetTraceOptions(int mask, int mtxparam, int mcomparam)
 {
 
-	//	Sets the tracing options for DecodeFrame. Mask is a bit
-	//	mask of ports to monitor (ie 101 binary will monitor ports
-	//	1 and 3). MTX enables monitoring on transmitted frames. MCOM
-	//	enables monitoring of protocol control frames (eg SABM, UA, RR),
-	//	as well as info frames.
+    //	Sets the tracing options for DecodeFrame. Mask is a bit
+    //	mask of ports to monitor (ie 101 binary will monitor ports
+    //	1 and 3). MTX enables monitoring on transmitted frames. MCOM
+    //	enables monitoring of protocol control frames (eg SABM, UA, RR),
+    //	as well as info frames.
 
-	MMASK = mask;
-	MTX = mtxparam;
-	MCOM = mcomparam;
+    MMASK = mask;
+    MTX = mtxparam;
+    MCOM = mcomparam;
 
-	return (0);
+    return (0);
 }
 
 DllExport int APIENTRY SetTraceOptionsEx(int mask, int mtxparam, int mcomparam, int monUIOnly)
 {
 
-	//	Sets the tracing options for DecodeFrame. Mask is a bit
-	//	mask of ports to monitor (ie 101 binary will monitor ports
-	//	1 and 3). MTX enables monitoring on transmitted frames. MCOM
-	//	enables monitoring of protocol control frames (eg SABM, UA, RR),
-	//	as well as info frames.
+    //	Sets the tracing options for DecodeFrame. Mask is a bit
+    //	mask of ports to monitor (ie 101 binary will monitor ports
+    //	1 and 3). MTX enables monitoring on transmitted frames. MCOM
+    //	enables monitoring of protocol control frames (eg SABM, UA, RR),
+    //	as well as info frames.
 
 
-	MMASK = mask;
-	MTX = mtxparam;
-	MCOM = mcomparam;
-	MUIONLY = monUIOnly;
+    MMASK = mask;
+    MTX = mtxparam;
+    MCOM = mcomparam;
+    MUIONLY = monUIOnly;
 
-	return 0;
+    return 0;
 }
 
 */
@@ -2153,32 +2166,32 @@ UCHAR	MUIONLY = 0;
 #pragma pack(1)
 
 struct myin_addr {
-	union {
-		struct { unsigned char s_b1, s_b2, s_b3, s_b4; } S_un_b;
-		struct { unsigned short s_w1, s_w2; } S_un_w;
-		unsigned long addr;
-	};
+    union {
+        struct { unsigned char s_b1, s_b2, s_b3, s_b4; } S_un_b;
+        struct { unsigned short s_w1, s_w2; } S_un_w;
+        unsigned long addr;
+    };
 };
 
 
 typedef struct _IPMSG
 {
-	//       FORMAT OF IP HEADER
-	//
-	//       NOTE THESE FIELDS ARE STORED HI ORDER BYTE FIRST (NOT NORMAL 8086 FORMAT)
+    //       FORMAT OF IP HEADER
+    //
+    //       NOTE THESE FIELDS ARE STORED HI ORDER BYTE FIRST (NOT NORMAL 8086 FORMAT)
 
-	UCHAR	VERLEN;          // 4 BITS VERSION, 4 BITS LENGTH
-	UCHAR	TOS;             // TYPE OF SERVICE
-	USHORT	IPLENGTH;        // DATAGRAM LENGTH
-	USHORT	IPID;            // IDENTIFICATION
-	USHORT	FRAGWORD;        // 3 BITS FLAGS, 13 BITS OFFSET
-	UCHAR	IPTTL;
-	UCHAR	IPPROTOCOL;      // HIGHER LEVEL PROTOCOL
-	USHORT	IPCHECKSUM;      // HEADER CHECKSUM
-	struct myin_addr IPSOURCE;
-	struct myin_addr IPDEST;
+    UCHAR	VERLEN;          // 4 BITS VERSION, 4 BITS LENGTH
+    UCHAR	TOS;             // TYPE OF SERVICE
+    USHORT	IPLENGTH;        // DATAGRAM LENGTH
+    USHORT	IPID;            // IDENTIFICATION
+    USHORT	FRAGWORD;        // 3 BITS FLAGS, 13 BITS OFFSET
+    UCHAR	IPTTL;
+    UCHAR	IPPROTOCOL;      // HIGHER LEVEL PROTOCOL
+    USHORT	IPCHECKSUM;      // HEADER CHECKSUM
+    struct myin_addr IPSOURCE;
+    struct myin_addr IPDEST;
 
-	UCHAR	Data;
+    UCHAR	Data;
 
 } IPMSG, *PIPMSG;
 
@@ -2186,22 +2199,22 @@ typedef struct _IPMSG
 typedef struct _TCPMSG
 {
 
-	//	FORMAT OF TCP HEADER WITHIN AN IP DATAGRAM
+    //	FORMAT OF TCP HEADER WITHIN AN IP DATAGRAM
 
-	//	NOTE THESE FIELDS ARE STORED HI ORDER BYTE FIRST (NOT NORMAL 8086 FORMAT)
+    //	NOTE THESE FIELDS ARE STORED HI ORDER BYTE FIRST (NOT NORMAL 8086 FORMAT)
 
-	USHORT	SOURCEPORT;
-	USHORT	DESTPORT;
+    USHORT	SOURCEPORT;
+    USHORT	DESTPORT;
 
-	ULONG	SEQNUM;
-	ULONG	ACKNUM;
+    ULONG	SEQNUM;
+    ULONG	ACKNUM;
 
-	UCHAR	TCPCONTROL;			// 4 BITS DATA OFFSET 4 RESERVED
-	UCHAR	TCPFLAGS;			// (2 RESERVED) URG ACK PSH RST SYN FIN
+    UCHAR	TCPCONTROL;			// 4 BITS DATA OFFSET 4 RESERVED
+    UCHAR	TCPFLAGS;			// (2 RESERVED) URG ACK PSH RST SYN FIN
 
-	USHORT	WINDOW;
-	USHORT	CHECKSUM;
-	USHORT	URGPTR;
+    USHORT	WINDOW;
+    USHORT	CHECKSUM;
+    USHORT	URGPTR;
 
 
 } TCPMSG, *PTCPMSG;
@@ -2209,15 +2222,15 @@ typedef struct _TCPMSG
 typedef struct _UDPMSG
 {
 
-	//	FORMAT OF UDP HEADER WITHIN AN IP DATAGRAM
+    //	FORMAT OF UDP HEADER WITHIN AN IP DATAGRAM
 
-	//	NOTE THESE FIELDS ARE STORED HI ORDER BYTE FIRST (NOT NORMAL 8086 FORMAT)
+    //	NOTE THESE FIELDS ARE STORED HI ORDER BYTE FIRST (NOT NORMAL 8086 FORMAT)
 
-	USHORT	SOURCEPORT;
-	USHORT	DESTPORT;
-	USHORT	LENGTH;
-	USHORT	CHECKSUM;
-	UCHAR	UDPData[0];
+    USHORT	SOURCEPORT;
+    USHORT	DESTPORT;
+    USHORT	LENGTH;
+    USHORT	CHECKSUM;
+    UCHAR	UDPData[0];
 
 } UDPMSG, *PUDPMSG;
 
@@ -2225,65 +2238,65 @@ typedef struct _UDPMSG
 
 typedef struct _ICMPMSG
 {
-	//	FORMAT OF ICMP HEADER WITHIN AN IP DATAGRAM
+    //	FORMAT OF ICMP HEADER WITHIN AN IP DATAGRAM
 
-	//	NOTE THESE FIELDS ARE STORED HI ORDER BYTE FIRST (NOT NORMAL 8086 FORMAT)
+    //	NOTE THESE FIELDS ARE STORED HI ORDER BYTE FIRST (NOT NORMAL 8086 FORMAT)
 
-	UCHAR	ICMPTYPE;
-	UCHAR	ICMPCODE;
-	USHORT	ICMPCHECKSUM;
+    UCHAR	ICMPTYPE;
+    UCHAR	ICMPCODE;
+    USHORT	ICMPCHECKSUM;
 
-	USHORT	ICMPID;
-	USHORT	ICMPSEQUENCE;
-	UCHAR	ICMPData[0];
+    USHORT	ICMPID;
+    USHORT	ICMPSEQUENCE;
+    UCHAR	ICMPData[0];
 
 } ICMPMSG, *PICMPMSG;
 
 
 typedef struct _L3MESSAGE
 {
-	//
-	//	NETROM LEVEL 3 MESSAGE - WITHOUT L2 INFO 
-	//
-	UCHAR	L3SRCE[7];			// ORIGIN NODE
-	UCHAR	L3DEST[7];			// DEST NODE
-	UCHAR	L3TTL;				// TX MONITOR FIELD - TO PREVENT MESSAGE GOING								// ROUND THE NETWORK FOR EVER DUE TO ROUTING LOOP
+    //
+    //	NETROM LEVEL 3 MESSAGE - WITHOUT L2 INFO
+    //
+    UCHAR	L3SRCE[7];			// ORIGIN NODE
+    UCHAR	L3DEST[7];			// DEST NODE
+    UCHAR	L3TTL;				// TX MONITOR FIELD - TO PREVENT MESSAGE GOING								// ROUND THE NETWORK FOR EVER DUE TO ROUTING LOOP
 //
 //	NETROM LEVEL 4 DATA
 //
-	UCHAR	L4INDEX;			// TRANSPORT SESSION INDEX
-	UCHAR	L4ID;				// TRANSPORT SESSION ID
-	UCHAR	L4TXNO;				// TRANSMIT SEQUENCE NUMBER
-	UCHAR	L4RXNO;				// RECEIVE (ACK) SEQ NUMBER
-	UCHAR	L4FLAGS;			// FRAGMENTATION, ACK/NAK, FLOW CONTROL AND MSG TYPE BITS
+    UCHAR	L4INDEX;			// TRANSPORT SESSION INDEX
+    UCHAR	L4ID;				// TRANSPORT SESSION ID
+    UCHAR	L4TXNO;				// TRANSMIT SEQUENCE NUMBER
+    UCHAR	L4RXNO;				// RECEIVE (ACK) SEQ NUMBER
+    UCHAR	L4FLAGS;			// FRAGMENTATION, ACK/NAK, FLOW CONTROL AND MSG TYPE BITS
 
-	UCHAR	L4DATA[236];		//DATA
+    UCHAR	L4DATA[236];		//DATA
 
 } L3MESSAGE, *PL3MESSAGE;
 
 
 typedef struct _MESSAGE
 {
-	//	BASIC LINK LEVEL MESSAGE BUFFER LAYOUT
+    //	BASIC LINK LEVEL MESSAGE BUFFER LAYOUT
 
-	struct _MESSAGE * CHAIN;
+    struct _MESSAGE * CHAIN;
 
-	UCHAR	PORT;
-	USHORT	LENGTH;
+    UCHAR	PORT;
+    USHORT	LENGTH;
 
-	UCHAR	DEST[7];
-	UCHAR	ORIGIN[7];
+    UCHAR	DEST[7];
+    UCHAR	ORIGIN[7];
 
-	//	 MAY BE UP TO 56 BYTES OF DIGIS
+    //	 MAY BE UP TO 56 BYTES OF DIGIS
 
-	UCHAR	CTL;
-	UCHAR	PID;
+    UCHAR	CTL;
+    UCHAR	PID;
 
-	union
-	{                   /*  array named screen */
-		UCHAR L2DATA[256];
-		struct _L3MESSAGE L3MSG;
-	};
+    union
+    {                   /*  array named screen */
+        UCHAR L2DATA[256];
+        struct _L3MESSAGE L3MSG;
+    };
 
 
 }MESSAGE, *PMESSAGE;
@@ -2298,105 +2311,105 @@ char * DISPLAYARPDATAGRAM(UCHAR * Datagram, UCHAR * Output);
 
 int CountBits(unsigned long in)
 {
-	int n = 0;
-	while (in)
-	{
-		if (in & 1) n++;
-		in >>= 1;
-	}
-	return n;
+    int n = 0;
+    while (in)
+    {
+        if (in & 1) n++;
+        in >>= 1;
+    }
+    return n;
 }
 
 BOOL ConvToAX25(char * callsign, unsigned char * ax25call)
 {
-	int i;
+    int i;
 
-	memset(ax25call, 0x40, 6);		// in case short
-	ax25call[6] = 0x60;				// default SSID
+    memset(ax25call, 0x40, 6);		// in case short
+    ax25call[6] = 0x60;				// default SSID
 
-	for (i = 0; i < 7; i++)
-	{
-		if (callsign[i] == '-')
-		{
-			//
-			//	process ssid and return
-			//
-			i = atoi(&callsign[i + 1]);
+    for (i = 0; i < 7; i++)
+    {
+        if (callsign[i] == '-')
+        {
+            //
+            //	process ssid and return
+            //
+            i = atoi(&callsign[i + 1]);
 
-			if (i < 16)
-			{
-				ax25call[6] |= i << 1;
-				return (TRUE);
-			}
-			return (FALSE);
-		}
+            if (i < 16)
+            {
+                ax25call[6] |= i << 1;
+                return (TRUE);
+            }
+            return (FALSE);
+        }
 
-		if (callsign[i] == 0 || callsign[i] == 13 || callsign[i] == ' ' || callsign[i] == ',')
-		{
-			//
-			//	End of call - no ssid
-			//
-			return (TRUE);
-		}
+        if (callsign[i] == 0 || callsign[i] == 13 || callsign[i] == ' ' || callsign[i] == ',')
+        {
+            //
+            //	End of call - no ssid
+            //
+            return (TRUE);
+        }
 
-		ax25call[i] = callsign[i] << 1;
-	}
+        ax25call[i] = callsign[i] << 1;
+    }
 
-	//
-	//	Too many chars
-	//
+    //
+    //	Too many chars
+    //
 
-	return (FALSE);
+    return (FALSE);
 }
 
 
 int ConvFromAX25(unsigned char * incall, char * outcall)
 {
-	int in, out = 0;
-	unsigned char chr;
+    int in, out = 0;
+    unsigned char chr;
 
-	memset(outcall, 0x20, 10);
+    memset(outcall, 0x20, 10);
 
-	for (in = 0; in < 6; in++)
-	{
-		chr = incall[in];
-		if (chr == 0x40)
-			break;
-		chr >>= 1;
-		outcall[out++] = chr;
-	}
+    for (in = 0; in < 6; in++)
+    {
+        chr = incall[in];
+        if (chr == 0x40)
+            break;
+        chr >>= 1;
+        outcall[out++] = chr;
+    }
 
-	chr = incall[6];				// ssid
+    chr = incall[6];				// ssid
 
-	if (chr == 0x42)
-	{
-		outcall[out++] = '-';
-		outcall[out++] = 'T';
-		return out;
-	}
+    if (chr == 0x42)
+    {
+        outcall[out++] = '-';
+        outcall[out++] = 'T';
+        return out;
+    }
 
-	if (chr == 0x44)
-	{
-		outcall[out++] = '-';
-		outcall[out++] = 'R';
-		return out;
-	}
+    if (chr == 0x44)
+    {
+        outcall[out++] = '-';
+        outcall[out++] = 'R';
+        return out;
+    }
 
-	chr >>= 1;
-	chr &= 15;
+    chr >>= 1;
+    chr &= 15;
 
-	if (chr > 0)
-	{
-		outcall[out++] = '-';
-		if (chr > 9)
-		{
-			chr -= 10;
-			outcall[out++] = '1';
-		}
-		chr += 48;
-		outcall[out++] = chr;
-	}
-	return (out);
+    if (chr > 0)
+    {
+        outcall[out++] = '-';
+        if (chr > 9)
+        {
+            chr -= 10;
+            outcall[out++] = '1';
+        }
+        chr += 48;
+        outcall[out++] = chr;
+    }
+    return (out);
 }
 
 
@@ -2404,38 +2417,40 @@ int IntDecodeFrame(MESSAGE * msg, char * buffer, time_t Stamp, UINT Mask, BOOL A
 
 int APRSDecodeFrame(MESSAGE * msg, char * buffer, time_t Stamp, UINT Mask)
 {
-	return IntDecodeFrame(msg, buffer, Stamp, Mask, TRUE, FALSE);
+    return IntDecodeFrame(msg, buffer, Stamp, Mask, TRUE, FALSE);
 }
 
 int myDecodeFrame(MESSAGE * msg, char * buffer, int Stamp)
 {
-	return IntDecodeFrame(msg, buffer, Stamp, MMASK, FALSE, FALSE);
+    return IntDecodeFrame(msg, buffer, Stamp, MMASK, FALSE, FALSE);
 }
 
 int IntDecodeFrame(MESSAGE * msg, char * buffer, time_t Stamp, UINT Mask, BOOL APRS, BOOL MINI)
 {
-	UCHAR * ptr;
-	int n;
-	MESSAGE * ADJBUFFER;
-	ptrdiff_t Work;
-	UCHAR CTL;
-	BOOL PF = 0;
-	char CRCHAR[3] = "  ";
-	char PFCHAR[3] = "  ";
-	int Port;
-	int MSGFLAG = 0;		//CR and V1 flags
-	char * Output = buffer;
-	int HH, MM, SS;
-	char TR = 'R';
-	char From[10], To[10];
-	BOOL Info = 0;
-	BOOL FRMRFLAG = 0;
-	BOOL XIDFLAG = 0;
-	BOOL TESTFLAG = 0;
+    UCHAR * ptr;
+    int n;
+    MESSAGE * ADJBUFFER;
+    ptrdiff_t Work;
+    UCHAR CTL;
+    BOOL PF = 0;
+    char CRCHAR[3] = "  ";
+    char PFCHAR[3] = "  ";
+    int Port;
+    int MSGFLAG = 0;		//CR and V1 flags
+    char * Output = buffer;
+    int HH, MM, SS;
+    char TR = 'R';
+    char From[10], To[10];
+    BOOL Info = 0;
+    BOOL FRMRFLAG = 0;
+    BOOL XIDFLAG = 0;
+    BOOL TESTFLAG = 0;
+    UNUSED(TESTFLAG);
+    UNUSED(MSGFLAG);
 
-	size_t MsgLen = msg->LENGTH;
+    size_t MsgLen = msg->LENGTH;
 
-	// MINI mode is for Node Listen (remote monitor) Mode. Keep info to minimum
+    // MINI mode is for Node Listen (remote monitor) Mode. Keep info to minimum
 /*
 KO6IZ*>K7TMG-1:
 /ex
@@ -2449,813 +2464,816 @@ KC6OAR*>ID:
 
 //	GET THE CONTROL BYTE, TO SEE IF THIS FRAME IS TO BE DISPLAYED
 
-	n = 8;						// MAX DIGIS
-	ptr = &msg->ORIGIN[6];	// End of Address bit
+    n = 8;						// MAX DIGIS
+    ptr = &msg->ORIGIN[6];	// End of Address bit
 
-	while ((*ptr & 1) == 0)
-	{
-		//	MORE TO COME
+    while ((*ptr & 1) == 0)
+    {
+        //	MORE TO COME
 
-		ptr += 7;
-		n--;
+        ptr += 7;
+        n--;
 
-		if (n == 0)
-		{
-			return 0;						// Corrupt - no end of address bit
-		}
-	}
+        if (n == 0)
+        {
+            return 0;						// Corrupt - no end of address bit
+        }
+    }
 
-	// Reached End of digis
+    // Reached End of digis
 
-	Work = ptr - &msg->ORIGIN[6];			// Work is length of digis
+    Work = ptr - &msg->ORIGIN[6];			// Work is length of digis
 
-	MsgLen -= Work;
+    MsgLen -= Work;
 
-	ADJBUFFER = (MESSAGE *)((UCHAR *)msg + Work);			// ADJBUFFER points to CTL, etc. allowing for digis
+    ADJBUFFER = (MESSAGE *)((UCHAR *)msg + Work);			// ADJBUFFER points to CTL, etc. allowing for digis
 
-	CTL = ADJBUFFER->CTL;
+    CTL = ADJBUFFER->CTL;
 
-	if (CTL & PFBIT)
-		PF = TRUE;
+    if (CTL & PFBIT)
+        PF = TRUE;
 
-	CTL &= ~PFBIT;
+    CTL &= ~PFBIT;
 
-	if (MUIONLY)
-		if (CTL != 3)
-			return 0;
+    if (MUIONLY)
+        if (CTL != 3)
+            return 0;
 
-	if ((CTL & 1) == 0 || CTL == FRMR || CTL == 3)
-	{
-	}
-	else
-	{
-		if (((CTL & 2) && MINI) == 0)		// Want Control (but not super unless MCOM
-			if (MCOM == 0)
-				return 0;						// Dont do control
-	}
+    if ((CTL & 1) == 0 || CTL == FRMR || CTL == 3)
+    {
+    }
+    else
+    {
+        if (((CTL & 2) && MINI) == 0)		// Want Control (but not super unless MCOM
+            if (MCOM == 0)
+                return 0;						// Dont do control
+    }
 
 
-	Port = msg->PORT;
+    Port = msg->PORT;
 
-	if (Port & 0x80)
-	{
-		if (MTX == 0)
-			return 0;							//	TRANSMITTED FRAME - SEE IF MTX ON
+    if (Port & 0x80)
+    {
+        if (MTX == 0)
+            return 0;							//	TRANSMITTED FRAME - SEE IF MTX ON
 
-		TR = 'T';
-	}
+        TR = 'T';
+    }
 
-	Port &= 0x7F;
-
-	if (((1 << (Port - 1)) & Mask) == 0)		// Check MMASK
-		return 0;
+    Port &= 0x7F;
+
+    if (((1 << (Port - 1)) & Mask) == 0)		// Check MMASK
+        return 0;
 
 
-	Stamp = Stamp % 86400;		// Secs
-	HH = (int)(Stamp / 3600);
+    Stamp = Stamp % 86400;		// Secs
+    HH = (int)(Stamp / 3600);
 
-	Stamp -= HH * 3600;
-	MM = (int)(Stamp / 60);
-
-	SS = (int)(Stamp - MM * 60);
-
-	// Add Port: if MINI mode and monitoring more than one port
-
-	if (MINI == 0)
-		Output += sprintf((char *)Output, "%02d:%02d:%02d%c ", HH, MM, SS, TR);
-	else
-		if (CountBits(Mask) > 1)
-			Output += sprintf((char *)Output, "%d:", Port);
-
-	From[ConvFromAX25(msg->ORIGIN, From)] = 0;
-	To[ConvFromAX25(msg->DEST, To)] = 0;
-
-	Output += sprintf((char *)Output, "%s>%s", From, To);
-
-	//	Display any Digi-Peaters   
+    Stamp -= HH * 3600;
+    MM = (int)(Stamp / 60);
+
+    SS = (int)(Stamp - MM * 60);
+
+    // Add Port: if MINI mode and monitoring more than one port
+
+    if (MINI == 0)
+        Output += sprintf((char *)Output, "%02d:%02d:%02d%c ", HH, MM, SS, TR);
+    else
+        if (CountBits(Mask) > 1)
+            Output += sprintf((char *)Output, "%d:", Port);
+
+    From[ConvFromAX25(msg->ORIGIN, From)] = 0;
+    To[ConvFromAX25(msg->DEST, To)] = 0;
+
+    Output += sprintf((char *)Output, "%s>%s", From, To);
+
+    //	Display any Digi-Peaters
 
-	n = 8;					// Max number of digi-peaters
-	ptr = &msg->ORIGIN[6];	// End of Address bit
+    n = 8;					// Max number of digi-peaters
+    ptr = &msg->ORIGIN[6];	// End of Address bit
 
-	while ((*ptr & 1) == 0)
-	{
-		//	MORE TO COME
+    while ((*ptr & 1) == 0)
+    {
+        //	MORE TO COME
 
-		From[ConvFromAX25(ptr + 1, From)] = 0;
-		Output += sprintf((char *)Output, ",%s", From);
+        From[ConvFromAX25(ptr + 1, From)] = 0;
+        Output += sprintf((char *)Output, ",%s", From);
 
-		ptr += 7;
-		n--;
+        ptr += 7;
+        n--;
 
-		if (n == 0)
-			break;
+        if (n == 0)
+            break;
 
-		// See if digi actioned - put a * on last actioned
-
-		if (*ptr & 0x80)
-		{
-			if (*ptr & 1)						// if last address, must need *
-				*(Output++) = '*';
-			else
-				if ((ptr[7] & 0x80) == 0)		// Repeased by next?
-					*(Output++) = '*';			// No, so need *
-		}
-	}
-
-	if (MINI == 0)
-		Output += sprintf((char *)Output, " Port=%d ", Port);
-
-	// Set up CR and PF
-
-	CRCHAR[0] = 0;
-	PFCHAR[0] = 0;
-
-	if (msg->DEST[6] & 0x80)
-	{
-		if (msg->ORIGIN[6] & 0x80)			//	Both set, assume V1
-			MSGFLAG |= VER1;
-		else
-		{
-			MSGFLAG |= CMDBIT;
-			CRCHAR[0] = ' ';
-			CRCHAR[1] = 'C';
-			if (PF)							// If FP set
-			{
-				PFCHAR[0] = ' ';
-				PFCHAR[1] = 'P';
-			}
-		}
-	}
-	else
-	{
-		if (msg->ORIGIN[6] & 0x80)			//	Only Origin Set
-		{
-			MSGFLAG |= RESP;
-			CRCHAR[0] = ' ';
-			CRCHAR[1] = 'R';
-			if (PF)							// If FP set
-			{
-				PFCHAR[0] = ' ';
-				PFCHAR[1] = 'F';
-			}
-		}
-		else
-			MSGFLAG |= VER1;				// Neither, assume V1
-	}
-
-	if ((CTL & 1) == 0)						// I frame
-	{
-		int NS = (CTL >> 1) & 7;			// ISOLATE RECEIVED N(S)
-		int NR = (CTL >> 5) & 7;
-
-		Info = 1;
-
-		if (MINI == 0)
-			Output += sprintf((char *)Output, "<I%s%s S%d R%d>", CRCHAR, PFCHAR, NS, NR);
-	}
-	else if (CTL == 3)
-	{
-		//	Un-numbered Information Frame 
-
-		Output += sprintf((char *)Output, "<UI%s>", CRCHAR);
-		Info = 1;
-	}
-	else if (CTL & 2)
-	{
-		// UN Numbered
-
-		char SUP[6] = "??";
-
-		switch (CTL)
-		{
-		case SABM:
-
-			strcpy(SUP, "C");
-			break;
-
-		case SABME:
-
-			strcpy(SUP, "SABME");
-			break;
-
-		case XID:
-
-			strcpy(SUP, "XID");
-			XIDFLAG = 1;
-			break;
-
-		case TEST:
-
-			strcpy(SUP, "TEST");
-			TESTFLAG = 1;
-			break;
-
-		case DISC:
-
-			strcpy(SUP, "D");
-			break;
-
-		case DM:
-
-			strcpy(SUP, "DM");
-			break;
-
-		case UA:
-
-			strcpy(SUP, "UA");
-			break;
-
-
-		case FRMR:
-
-			strcpy(SUP, "FRMR");
-			FRMRFLAG = 1;
-			break;
-		}
-
-		if (MINI)
-			Output += sprintf((char *)Output, "<%s>", SUP);
-		else
-			Output += sprintf((char *)Output, "<%s%s%s>", SUP, CRCHAR, PFCHAR);
-	}
-	else
-	{
-		// Super
-
-		int NR = (CTL >> 5) & 7;
-		char SUP[5] = "??";
-
-		switch (CTL & 0x0F)
-		{
-		case RR:
-
-			strcpy(SUP, "RR");
-			break;
-
-		case RNR:
-
-			strcpy(SUP, "RNR");
-			break;
-
-		case REJ:
-
-			strcpy(SUP, "REJ");
-			break;
-		case SREJ:
-
-			strcpy(SUP, "SREJ");
-			break;
-		}
-
-		Output += sprintf((char *)Output, "<%s%s%s R%d>", SUP, CRCHAR, PFCHAR, NR);
-
-	}
-
-	if (FRMRFLAG)
-		Output += sprintf((char *)Output, " %02X %02X %02X", ADJBUFFER->PID, ADJBUFFER->L2DATA[0], ADJBUFFER->L2DATA[1]);
-
-	if (XIDFLAG)
-	{
-		// Decode and display XID
-
-		UCHAR * ptr = &ADJBUFFER->PID;
-
-		if (*ptr++ == 0x82 && *ptr++ == 0x80)
-		{
-			int Type;
-			int Len;
-			unsigned int value;
-			int xidlen = *(ptr++) << 8;
-			xidlen += *ptr++;
-
-			// XID is set of Type, Len, Value n-tuples
+        // See if digi actioned - put a * on last actioned
+
+        if (*ptr & 0x80)
+        {
+            if (*ptr & 1)						// if last address, must need *
+                *(Output++) = '*';
+            else
+                if ((ptr[7] & 0x80) == 0)		// Repeased by next?
+                    *(Output++) = '*';			// No, so need *
+        }
+    }
+
+    if (MINI == 0)
+        Output += sprintf((char *)Output, " Port=%d ", Port);
+
+    // Set up CR and PF
+
+    CRCHAR[0] = 0;
+    PFCHAR[0] = 0;
+
+    if (msg->DEST[6] & 0x80)
+    {
+        if (msg->ORIGIN[6] & 0x80)			//	Both set, assume V1
+            MSGFLAG |= VER1;
+        else
+        {
+            MSGFLAG |= CMDBIT;
+            CRCHAR[0] = ' ';
+            CRCHAR[1] = 'C';
+            if (PF)							// If FP set
+            {
+                PFCHAR[0] = ' ';
+                PFCHAR[1] = 'P';
+            }
+        }
+    }
+    else
+    {
+        if (msg->ORIGIN[6] & 0x80)			//	Only Origin Set
+        {
+            MSGFLAG |= RESP;
+            CRCHAR[0] = ' ';
+            CRCHAR[1] = 'R';
+            if (PF)							// If FP set
+            {
+                PFCHAR[0] = ' ';
+                PFCHAR[1] = 'F';
+            }
+        }
+        else
+            MSGFLAG |= VER1;				// Neither, assume V1
+    }
+
+    if ((CTL & 1) == 0)						// I frame
+    {
+        int NS = (CTL >> 1) & 7;			// ISOLATE RECEIVED N(S)
+        int NR = (CTL >> 5) & 7;
+
+        Info = 1;
+
+        if (MINI == 0)
+            Output += sprintf((char *)Output, "<I%s%s S%d R%d>", CRCHAR, PFCHAR, NS, NR);
+    }
+    else if (CTL == 3)
+    {
+        //	Un-numbered Information Frame
+
+        Output += sprintf((char *)Output, "<UI%s>", CRCHAR);
+        Info = 1;
+    }
+    else if (CTL & 2)
+    {
+        // UN Numbered
+
+        char SUP[6] = "??";
+
+        switch (CTL)
+        {
+        case SABM:
+
+            strcpy(SUP, "C");
+            break;
+
+        case SABME:
+
+            strcpy(SUP, "SABME");
+            break;
+
+        case XID:
+
+            strcpy(SUP, "XID");
+            XIDFLAG = 1;
+            break;
+
+        case TEST:
+
+            strcpy(SUP, "TEST");
+            TESTFLAG = 1;
+            break;
+
+        case DISC:
+
+            strcpy(SUP, "D");
+            break;
+
+        case DM:
+
+            strcpy(SUP, "DM");
+            break;
+
+        case UA:
+
+            strcpy(SUP, "UA");
+            break;
+
+
+        case FRMR:
+
+            strcpy(SUP, "FRMR");
+            FRMRFLAG = 1;
+            break;
+        }
+
+        if (MINI)
+            Output += sprintf((char *)Output, "<%s>", SUP);
+        else
+            Output += sprintf((char *)Output, "<%s%s%s>", SUP, CRCHAR, PFCHAR);
+    }
+    else
+    {
+        // Super
+
+        int NR = (CTL >> 5) & 7;
+        char SUP[5] = "??";
+
+        switch (CTL & 0x0F)
+        {
+        case RR:
+
+            strcpy(SUP, "RR");
+            break;
+
+        case RNR:
+
+            strcpy(SUP, "RNR");
+            break;
+
+        case REJ:
+
+            strcpy(SUP, "REJ");
+            break;
+        case SREJ:
+
+            strcpy(SUP, "SREJ");
+            break;
+        }
+
+        Output += sprintf((char *)Output, "<%s%s%s R%d>", SUP, CRCHAR, PFCHAR, NR);
+
+    }
+
+    if (FRMRFLAG)
+        Output += sprintf((char *)Output, " %02X %02X %02X", ADJBUFFER->PID, ADJBUFFER->L2DATA[0], ADJBUFFER->L2DATA[1]);
+
+    if (XIDFLAG)
+    {
+        // Decode and display XID
+
+        UCHAR * ptr = &ADJBUFFER->PID;
+
+        if (*ptr++ == 0x82 && *ptr++ == 0x80)
+        {
+            int Type;
+            int Len;
+            unsigned int value;
+            int xidlen = *(ptr++) << 8;
+            xidlen += *ptr++;
+
+            // XID is set of Type, Len, Value n-tuples
 
 // G8BPQ-2>G8BPQ:(XID cmd, p=1) Half-Duplex SREJ modulo-128 I-Field-Length-Rx=256 Window-Size-Rx=32 Ack-Timer=3000 Retries=10
 
 
-			while (xidlen > 0)
-			{
-				Type = *ptr++;
-				Len = *ptr++;
+            while (xidlen > 0)
+            {
+                Type = *ptr++;
+                Len = *ptr++;
 
-				value = 0;
-				xidlen -= (Len + 2);
+                value = 0;
+                xidlen -= (Len + 2);
 
-				while (Len--)
-				{
-					value <<= 8;
-					value += *ptr++;
-				}
-				switch (Type)
-				{
-				case 2:				//Bin fields
-				case 3:
+                while (Len--)
+                {
+                    value <<= 8;
+                    value += *ptr++;
+                }
+                switch (Type)
+                {
+                case 2:				//Bin fields
+                case 3:
 
-					Output += sprintf((char *)Output, " %d=%x", Type, value);
-					break;
+                    Output += sprintf((char *)Output, " %d=%x", Type, value);
+                    break;
 
-				case 6:				//RX Size
+                case 6:				//RX Size
 
-					Output += sprintf((char *)Output, " RX Paclen=%d", value / 8);
-					break;
+                    Output += sprintf((char *)Output, " RX Paclen=%d", value / 8);
+                    break;
 
-				case 8:				//RX Window
+                case 8:				//RX Window
 
-					Output += sprintf((char *)Output, " RX Window=%d", value);
-					break;
-				}
-			}
-		}
-	}
-	if (Info)
-	{
-		// We have an info frame
+                    Output += sprintf((char *)Output, " RX Window=%d", value);
+                    break;
+                }
+            }
+        }
+    }
+    if (Info)
+    {
+        // We have an info frame
 
-		switch (ADJBUFFER->PID)
-		{
-		case 0xF0:		// Normal Data
-		{
-			char Infofield[257];
-			char * ptr1 = Infofield;
-			char * ptr2 = ADJBUFFER->L2DATA;
-			UCHAR C;
-			size_t len;
+        switch (ADJBUFFER->PID)
+        {
+        case 0xF0:		// Normal Data
+        {
+            char Infofield[257];
+            char * ptr1 = Infofield;
+            char * ptr2 = (char *)(ADJBUFFER->L2DATA);
+            UCHAR C;
+            size_t len;
 
-			MsgLen = MsgLen - (19 + sizeof(void *));
+            MsgLen = MsgLen - (19 + sizeof(void *));
 
-			if (MsgLen < 0 || MsgLen > 257)
-				return 0;				// Duff
+            //if (MsgLen < 0 || MsgLen > 257) // MsgLen is type size_t which is unsigned; can't be < 0
+            if (MsgLen > 257)
+                return 0;				// Duff
 
-			while (MsgLen--)
-			{
-				C = *(ptr2++);
+            while (MsgLen--)
+            {
+                C = *(ptr2++);
 
-				if (APRS)
-					*(ptr1++) = C;		// MIC-E needs all chars
-				else
-				{
-					// Convert to printable
+                if (APRS)
+                    *(ptr1++) = C;		// MIC-E needs all chars
+                else
+                {
+                    // Convert to printable
 
-					C &= 0x7F;
+                    C &= 0x7F;
 
-					if (C == 13 || C == 10 || C > 31)
-						*(ptr1++) = C;
-				}
-			}
+                    if (C == 13 || C == 10 || C > 31)
+                        *(ptr1++) = C;
+                }
+            }
 
-			len = ptr1 - Infofield;
+            len = ptr1 - Infofield;
 
-			Output[0] = ':';
-			Output[1] = 13;
-			memcpy(&Output[2], Infofield, len);
-			Output += (len + 2);
+            Output[0] = ':';
+            Output[1] = 13;
+            memcpy(&Output[2], Infofield, len);
+            Output += (len + 2);
 
-			break;
-		}
-		case NETROM_PID:
+            break;
+        }
+        case NETROM_PID:
 
-			Output = DISPLAY_NETROM(ADJBUFFER, Output, (int)MsgLen);
-			break;
+            Output = DISPLAY_NETROM(ADJBUFFER, (Byte *)Output, (int)MsgLen);
+            break;
 
-		case IP_PID:
+        case IP_PID:
 
-			Output += sprintf((char *)Output, " <IP>\r");
-			Output = DISPLAYIPDATAGRAM((IPMSG *)&ADJBUFFER->L2DATA[0], Output, (int)MsgLen);
-			break;
+            Output += sprintf((char *)Output, " <IP>\r");
+            Output = (char *)DISPLAYIPDATAGRAM((IPMSG *)&ADJBUFFER->L2DATA[0], (Byte *)Output, (int)MsgLen);
+            break;
 
-		case ARP_PID:
+        case ARP_PID:
 
-			Output = DISPLAYARPDATAGRAM(&ADJBUFFER->L2DATA[0], Output);
-			break;
+            Output = (char *)DISPLAYARPDATAGRAM(&ADJBUFFER->L2DATA[0], (Byte *)Output);
+            break;
 
-		case 8:					// Fragmented IP
+        case 8:					// Fragmented IP
 
-			n = ADJBUFFER->L2DATA[0];	// Frag Count
+            n = ADJBUFFER->L2DATA[0];	// Frag Count
 
-			Output += sprintf((char *)Output, "<Fragmented IP %02x>\r", n);
+            Output += sprintf((char *)Output, "<Fragmented IP %02x>\r", n);
 
-			if (ADJBUFFER->L2DATA[0] & 0x80)	// First Frag - Display Header
-			{
-				Output = DISPLAYIPDATAGRAM((IPMSG *)&ADJBUFFER->L2DATA[2], Output, (int)MsgLen - 1);
-			}
+            if (ADJBUFFER->L2DATA[0] & 0x80)	// First Frag - Display Header
+            {
+                Output = (char *)DISPLAYIPDATAGRAM((IPMSG *)&ADJBUFFER->L2DATA[2], (Byte *)Output, (int)MsgLen - 1);
+            }
 
-			break;
-		}
-	}
+            break;
+        }
+    }
 
-	if (Output[-1] != 13)
-		Output += sprintf((char *)Output, "\r");
+    if (Output[-1] != 13)
+        Output += sprintf((char *)Output, "\r");
 
-	return (int)(Output - buffer);
+    return (int)(Output - buffer);
 
 }
-//      Display NET/ROM data                                                 
+//      Display NET/ROM data
 
 char * DISPLAY_NETROM(MESSAGE * ADJBUFFER, UCHAR * Output, int MsgLen)
 {
-	char Alias[7] = "";
-	char Dest[10];
-	char Node[10];
-	UCHAR TTL, Index, ID, TXNO, RXNO, OpCode, Flags, Window;
-	UCHAR * ptr = &ADJBUFFER->L2DATA[0];
+    char Alias[7] = "";
+    char Dest[10];
+    char Node[10];
+    UCHAR TTL, Index, ID, TXNO, RXNO, OpCode, Flags, Window;
+    UCHAR * ptr = &ADJBUFFER->L2DATA[0];
 
-	if (ADJBUFFER->L2DATA[0] == NODES_SIG)
-	{
-		// Display NODES
-
-
-		// If an INP3 RIF (type <> UI) decode as such
-
-		if (ADJBUFFER->CTL != 3)		// UI
-			return DisplayINP3RIF(&ADJBUFFER->L2DATA[1], Output, MsgLen - 24);
-
-		memcpy(Alias, ++ptr, 6);
-
-		ptr += 6;
-
-		Output += sprintf((char *)Output, " NODES broadcast from %s\r", Alias);
-
-		MsgLen -= 30;					//Header, mnemonic and signature length
-
-		while (MsgLen > 20)				// Entries are 21 bytes
-		{
-			Dest[ConvFromAX25(ptr, Dest)] = 0;
-			ptr += 7;
-			memcpy(Alias, ptr, 6);
-			ptr += 6;
-			strlop(Alias, ' ');
-			Node[ConvFromAX25(ptr, Node)] = 0;
-			ptr += 7;
-
-			Output += sprintf((char *)Output, "  %s:%s via %s qlty=%d\r", Alias, Dest, Node, ptr[0]);
-			ptr++;
-			MsgLen -= 21;
-		}
-		return Output;
-	}
-
-	//	Display normal NET/ROM transmissions 
-
-	Output += sprintf((char *)Output, " NET/ROM\r  ");
-
-	Dest[ConvFromAX25(ptr, Dest)] = 0;
-	ptr += 7;
-	Node[ConvFromAX25(ptr, Node)] = 0;
-	ptr += 7;
-
-	TTL = *(ptr++);
-	Index = *(ptr++);
-	ID = *(ptr++);
-	TXNO = *(ptr++);
-	RXNO = *(ptr++);
-	OpCode = Flags = *(ptr++);
-
-	OpCode &= 15;				// Remove Flags
-
-	Output += sprintf((char *)Output, "%s to %s ttl %d cct=%02X%02X ", Dest, Node, TTL, Index, ID);
-	MsgLen -= 20;
-
-	switch (OpCode)
-	{
-	case L4CREQ:
-
-		Window = *(ptr++);
-		Dest[ConvFromAX25(ptr, Dest)] = 0;
-		ptr += 7;
-		Node[ConvFromAX25(ptr, Node)] = 0;
-		ptr += 7;
-
-		Output += sprintf((char *)Output, "<CON REQ> w=%d %s at %s", Window, Dest, Node);
-
-		if (MsgLen > 38)				// BPQ Extended Params
-		{
-			short Timeout = (short)*ptr;
-			Output += sprintf((char *)Output, " t/o %d", Timeout);
-		}
-
-		return Output;
-
-	case L4CACK:
-
-		if (Flags & L4BUSY)				// BUSY RETURNED
-			return Output + sprintf((char *)Output, " <CON NAK> - BUSY");
-
-		return Output + sprintf((char *)Output, " <CON ACK> w=%d my cct=%02X%02X", ptr[1], TXNO, RXNO);
-
-	case L4DREQ:
-
-		return Output + sprintf((char *)Output, " <DISC REQ>");
-
-	case L4DACK:
-
-		return Output + sprintf((char *)Output, " <DISC ACK>");
-
-	case L4INFO:
-	{
-		char Infofield[257];
-		char * ptr1 = Infofield;
-		UCHAR C;
-		size_t len;
-
-		Output += sprintf((char *)Output, " <INFO S%d R%d>", TXNO, RXNO);
-
-		if (Flags & L4BUSY)
-			*(Output++) = 'B';
-
-		if (Flags & L4NAK)
-			*(Output++) = 'N';
-
-		if (Flags & L4MORE)
-			*(Output++) = 'M';
-
-		MsgLen = MsgLen - (19 + sizeof(void *));
-
-		if (MsgLen < 0 || MsgLen > 257)
-			return Output;				// Duff
-
-		while (MsgLen--)
-		{
-			C = *(ptr++);
-
-			// Convert to printable
-
-			C &= 0x7F;
-
-			if (C == 13 || C == 10 || C > 31)
-				*(ptr1++) = C;
-		}
-
-		len = ptr1 - Infofield;
-
-		Output[0] = ':';
-		Output[1] = 13;
-		memcpy(&Output[2], Infofield, len);
-		Output += (len + 2);
-	}
-
-	return Output;
-
-	case L4IACK:
-
-		Output += sprintf((char *)Output, " <INFO ACK R%d> ", RXNO);
-
-		if (Flags & L4BUSY)
-			*(Output++) = 'B';
-
-		if (Flags & L4NAK)
-			*(Output++) = 'N';
-
-		if (Flags & L4MORE)
-			*(Output++) = 'M';
-
-		return Output;
+    if (ADJBUFFER->L2DATA[0] == NODES_SIG)
+    {
+        // Display NODES
 
 
-	case 0:
+        // If an INP3 RIF (type <> UI) decode as such
 
-		//	OPcode zero is used for several things
+        if (ADJBUFFER->CTL != 3)		// UI
+            return (char *)DisplayINP3RIF(&ADJBUFFER->L2DATA[1], Output, MsgLen - 24);
 
-		if (Index == 0x0c && ID == 0x0c)	// IP	
-		{
-			*(Output++) = 13;
-			*(Output++) = ' ';
-			Output = DISPLAYIPDATAGRAM((IPMSG *)ptr, Output, MsgLen);
-			return Output;
-		}
+        memcpy(Alias, ++ptr, 6);
 
-		if (Index == 0 && ID == 1)			// NRR	
-		{
-			Output += sprintf((char *)Output, " <Record Route>\r");
+        ptr += 6;
 
-			MsgLen -= 23;
+        Output += sprintf((char *)Output, " NODES broadcast from %s\r", Alias);
 
-			while (MsgLen > 6)
-			{
-				Dest[ConvFromAX25(ptr, Dest)] = 0;
+        MsgLen -= 30;					//Header, mnemonic and signature length
 
-				if (ptr[7] & 0x80)
-					Output += sprintf((char *)Output, "%s* ", Dest);
-				else
-					Output += sprintf((char *)Output, "%s ", Dest);
+        while (MsgLen > 20)				// Entries are 21 bytes
+        {
+            Dest[ConvFromAX25(ptr, Dest)] = 0;
+            ptr += 7;
+            memcpy(Alias, ptr, 6);
+            ptr += 6;
+            strlop(Alias, ' ');
+            Node[ConvFromAX25(ptr, Node)] = 0;
+            ptr += 7;
 
-				ptr += 8;
-				MsgLen -= 8;
-			}
+            Output += sprintf((char *)Output, "  %s:%s via %s qlty=%d\r", Alias, Dest, Node, ptr[0]);
+            ptr++;
+            MsgLen -= 21;
+        }
+        return (char *)Output;
+    }
 
-			return Output;
-		}
-	}
+    //	Display normal NET/ROM transmissions
 
-	Output += sprintf((char *)Output, " <???\?>");
-	return Output;
+    Output += sprintf((char *)Output, " NET/ROM\r  ");
+
+    Dest[ConvFromAX25(ptr, Dest)] = 0;
+    ptr += 7;
+    Node[ConvFromAX25(ptr, Node)] = 0;
+    ptr += 7;
+
+    TTL = *(ptr++);
+    Index = *(ptr++);
+    ID = *(ptr++);
+    TXNO = *(ptr++);
+    RXNO = *(ptr++);
+    OpCode = Flags = *(ptr++);
+
+    OpCode &= 15;				// Remove Flags
+
+    Output += sprintf((char *)Output, "%s to %s ttl %d cct=%02X%02X ", Dest, Node, TTL, Index, ID);
+    MsgLen -= 20;
+
+    switch (OpCode)
+    {
+    case L4CREQ:
+
+        Window = *(ptr++);
+        Dest[ConvFromAX25(ptr, Dest)] = 0;
+        ptr += 7;
+        Node[ConvFromAX25(ptr, Node)] = 0;
+        ptr += 7;
+
+        Output += sprintf((char *)Output, "<CON REQ> w=%d %s at %s", Window, Dest, Node);
+
+        if (MsgLen > 38)				// BPQ Extended Params
+        {
+            short Timeout = (short)*ptr;
+            Output += sprintf((char *)Output, " t/o %d", Timeout);
+        }
+
+        return (char *)Output;
+
+    case L4CACK:
+
+        if (Flags & L4BUSY)				// BUSY RETURNED
+            return (char *)Output + sprintf((char *)Output, " <CON NAK> - BUSY");
+
+        return (char *)Output + sprintf((char *)Output, " <CON ACK> w=%d my cct=%02X%02X", ptr[1], TXNO, RXNO);
+
+    case L4DREQ:
+
+        return (char *)Output + sprintf((char *)Output, " <DISC REQ>");
+
+    case L4DACK:
+
+        return (char *)Output + sprintf((char *)Output, " <DISC ACK>");
+
+    case L4INFO:
+    {
+        char Infofield[257];
+        char * ptr1 = Infofield;
+        UCHAR C;
+        size_t len;
+
+        Output += sprintf((char *)Output, " <INFO S%d R%d>", TXNO, RXNO);
+
+        if (Flags & L4BUSY)
+            *(Output++) = 'B';
+
+        if (Flags & L4NAK)
+            *(Output++) = 'N';
+
+        if (Flags & L4MORE)
+            *(Output++) = 'M';
+
+        MsgLen = MsgLen - (19 + sizeof(void *));
+
+        if (MsgLen < 0 || MsgLen > 257)
+            return (char *)Output;				// Duff
+
+        while (MsgLen--)
+        {
+            C = *(ptr++);
+
+            // Convert to printable
+
+            C &= 0x7F;
+
+            if (C == 13 || C == 10 || C > 31)
+                *(ptr1++) = C;
+        }
+
+        len = ptr1 - Infofield;
+
+        Output[0] = ':';
+        Output[1] = 13;
+        memcpy(&Output[2], Infofield, len);
+        Output += (len + 2);
+    }
+
+    return (char *)Output;
+
+    case L4IACK:
+
+        Output += sprintf((char *)Output, " <INFO ACK R%d> ", RXNO);
+
+        if (Flags & L4BUSY)
+            *(Output++) = 'B';
+
+        if (Flags & L4NAK)
+            *(Output++) = 'N';
+
+        if (Flags & L4MORE)
+            *(Output++) = 'M';
+
+        return (char *)Output;
+
+
+    case 0:
+
+        //	OPcode zero is used for several things
+
+        if (Index == 0x0c && ID == 0x0c)	// IP
+        {
+            *(Output++) = 13;
+            *(Output++) = ' ';
+            Output = DISPLAYIPDATAGRAM((IPMSG *)ptr, Output, MsgLen);
+            return (char *)Output;
+        }
+
+        if (Index == 0 && ID == 1)			// NRR
+        {
+            Output += sprintf((char *)Output, " <Record Route>\r");
+
+            MsgLen -= 23;
+
+            while (MsgLen > 6)
+            {
+                Dest[ConvFromAX25(ptr, Dest)] = 0;
+
+                if (ptr[7] & 0x80)
+                    Output += sprintf((char *)Output, "%s* ", Dest);
+                else
+                    Output += sprintf((char *)Output, "%s ", Dest);
+
+                ptr += 8;
+                MsgLen -= 8;
+            }
+
+            return (char *)Output;
+        }
+    }
+
+    Output += sprintf((char *)Output, " <???\?>");
+    return (char *)Output;
 }
 
 /*
 
-	PUBLIC	L3IP
+    PUBLIC	L3IP
 L3IP:
 ;
 ;	TCP/IP DATAGRAM
 ;
-	mov	EBX,OFFSET IP_MSG
-	call	NORMSTR
+    mov	EBX,OFFSET IP_MSG
+    call	NORMSTR
 ;
-	INC	ESI			; NOW POINTING TO IP HEADER
+    INC	ESI			; NOW POINTING TO IP HEADER
 
 */
+
 UCHAR * DISPLAYIPDATAGRAM(IPMSG * IP, UCHAR * Output, int MsgLen)
 {
-	UCHAR * ptr;
-	USHORT FRAGWORD;
+    UCHAR * ptr;
+    USHORT FRAGWORD;
+    UNUSED(MsgLen);
 
-	ptr = (UCHAR *)&IP->IPSOURCE;
-	Output += sprintf((char *)Output, "%d.%d.%d.%d>", ptr[0], ptr[1], ptr[2], ptr[3]);
+    ptr = (UCHAR *)&IP->IPSOURCE;
+    Output += sprintf((char *)Output, "%d.%d.%d.%d>", ptr[0], ptr[1], ptr[2], ptr[3]);
 
-	ptr = (UCHAR *)&IP->IPDEST;
-	Output += sprintf((char *)Output, "%d.%d.%d.%d LEN:%d ", ptr[0], ptr[1], ptr[2], ptr[3], htons(IP->IPLENGTH));
+    ptr = (UCHAR *)&IP->IPDEST;
+    Output += sprintf((char *)Output, "%d.%d.%d.%d LEN:%d ", ptr[0], ptr[1], ptr[2], ptr[3], htons(IP->IPLENGTH));
 
-	FRAGWORD = ntohs(IP->FRAGWORD);
+    FRAGWORD = ntohs(IP->FRAGWORD);
 
-	if (FRAGWORD)
-	{
-		// If nonzero, check which bits are set 
+    if (FRAGWORD)
+    {
+        // If nonzero, check which bits are set
 
-		//Bit 0: reserved, must be zero
-		//Bit 1: (DF) 0 = May Fragment,  1 = Don't Fragment.
-		//Bit 2: (MF) 0 = Last Fragment, 1 = More Fragments.
-		//Fragment Offset:  13 bits
+        //Bit 0: reserved, must be zero
+        //Bit 1: (DF) 0 = May Fragment,  1 = Don't Fragment.
+        //Bit 2: (MF) 0 = Last Fragment, 1 = More Fragments.
+        //Fragment Offset:  13 bits
 
-		if (FRAGWORD & (1 << 14))
-			Output += sprintf((char *)Output, "DF ");
+        if (FRAGWORD & (1 << 14))
+            Output += sprintf((char *)Output, "DF ");
 
-		if (FRAGWORD & (1 << 13))
-			Output += sprintf((char *)Output, "MF ");
+        if (FRAGWORD & (1 << 13))
+            Output += sprintf((char *)Output, "MF ");
 
-		FRAGWORD &= 0xfff;
+        FRAGWORD &= 0xfff;
 
-		if (FRAGWORD)
-		{
-			Output += sprintf((char *)Output, "Offset %d ", FRAGWORD * 8);
-			return Output;			// Cant display proto fields
-		}
-	}
+        if (FRAGWORD)
+        {
+            Output += sprintf((char *)Output, "Offset %d ", FRAGWORD * 8);
+            return Output;			// Cant display proto fields
+        }
+    }
 
-	if (IP->IPPROTOCOL == 6)
-	{
-		PTCPMSG TCP = (PTCPMSG)&IP->Data;
+    if (IP->IPPROTOCOL == 6)
+    {
+        PTCPMSG TCP = (PTCPMSG)&IP->Data;
 
-		Output += sprintf((char *)Output, "TCP Src %d Dest %d ", ntohs(TCP->SOURCEPORT), ntohs(TCP->DESTPORT));
-		return Output;
-	}
+        Output += sprintf((char *)Output, "TCP Src %d Dest %d ", ntohs(TCP->SOURCEPORT), ntohs(TCP->DESTPORT));
+        return Output;
+    }
 
-	if (IP->IPPROTOCOL == 1)
-	{
-		PICMPMSG ICMPptr = (PICMPMSG)&IP->Data;
+    if (IP->IPPROTOCOL == 1)
+    {
+        PICMPMSG ICMPptr = (PICMPMSG)&IP->Data;
 
-		Output += sprintf((char *)Output, "ICMP ");
+        Output += sprintf((char *)Output, "ICMP ");
 
-		if (ICMPptr->ICMPTYPE == 8)
-			Output += sprintf((char *)Output, "Echo Request ");
-		else
-			if (ICMPptr->ICMPTYPE == 0)
-				Output += sprintf((char *)Output, "Echo Reply ");
-			else
-				Output += sprintf((char *)Output, "Code %d", ICMPptr->ICMPTYPE);
+        if (ICMPptr->ICMPTYPE == 8)
+            Output += sprintf((char *)Output, "Echo Request ");
+        else
+            if (ICMPptr->ICMPTYPE == 0)
+                Output += sprintf((char *)Output, "Echo Reply ");
+            else
+                Output += sprintf((char *)Output, "Code %d", ICMPptr->ICMPTYPE);
 
-		return Output;
-	}
+        return Output;
+    }
 
-	/*
-		MOV	AL,IPPROTOCOL[ESI]
-		CMP AL,6
-		JNE @F
+    /*
+        MOV	AL,IPPROTOCOL[ESI]
+        CMP AL,6
+        JNE @F
 
-		MOV EBX, OFFSET TCP
-		CALL NORMSTR
-		JMP ADD_CR
-	@@:
+        MOV EBX, OFFSET TCP
+        CALL NORMSTR
+        JMP ADD_CR
+    @@:
 
-		CMP AL,1
-		JNE @F
+        CMP AL,1
+        JNE @F
 
-		MOV EBX, OFFSET ICMP
-		CALL NORMSTR
-		JMP ADD_CR
-	@@:
+        MOV EBX, OFFSET ICMP
+        CALL NORMSTR
+        JMP ADD_CR
+    @@:
 
-		CALL	DISPLAY_BYTE_1		; DISPLAY PROTOCOL TYPE
+        CALL	DISPLAY_BYTE_1		; DISPLAY PROTOCOL TYPE
 
-	;	mov	AL,CR
-	;	call	PUTCHAR
-	;
-	;	MOV	ECX,39			; TESTING
-	;IPLOOP:
-	;	lodsb
-	;	CALL	BYTE_TO_HEX
-	;
-	;	LOOP	IPLOOP
+    ;	mov	AL,CR
+    ;	call	PUTCHAR
+    ;
+    ;	MOV	ECX,39			; TESTING
+    ;IPLOOP:
+    ;	lodsb
+    ;	CALL	BYTE_TO_HEX
+    ;
+    ;	LOOP	IPLOOP
 
-		JMP	ADD_CR
+        JMP	ADD_CR
 
 
-	*/
-	return Output;
+    */
+    return Output;
 }
 
 char * DISPLAYARPDATAGRAM(UCHAR * Datagram, UCHAR * Output)
 {
-	UCHAR * ptr = Datagram;
-	char Dest[10];
+    UCHAR * ptr = Datagram;
+    char Dest[10];
 
-	if (ptr[7] == 1)		// Request
-		return Output + sprintf((char *)Output, " ARP Request who has %d.%d.%d.%d? Tell %d.%d.%d.%d",
-			ptr[26], ptr[27], ptr[28], ptr[29], ptr[15], ptr[16], ptr[17], ptr[18]);
+    if (ptr[7] == 1)		// Request
+        return (char *)Output + sprintf((char *)Output, " ARP Request who has %d.%d.%d.%d? Tell %d.%d.%d.%d",
+            ptr[26], ptr[27], ptr[28], ptr[29], ptr[15], ptr[16], ptr[17], ptr[18]);
 
-	// Response
+    // Response
 
-	Dest[ConvFromAX25(&ptr[8], Dest)] = 0;
+    Dest[ConvFromAX25(&ptr[8], Dest)] = 0;
 
-	return Output + sprintf((char *)Output, " ARP Reply %d.%d.%d.%d is at %s Tell %d.%d.%d.%d",
-		ptr[15], ptr[16], ptr[17], ptr[18], Dest, ptr[26], ptr[27], ptr[28], ptr[29]);
+    return (char *)Output + sprintf((char *)Output, " ARP Reply %d.%d.%d.%d is at %s Tell %d.%d.%d.%d",
+        ptr[15], ptr[16], ptr[17], ptr[18], Dest, ptr[26], ptr[27], ptr[28], ptr[29]);
 
 }
 
 
 UCHAR * DisplayINP3RIF(UCHAR * ptr1, UCHAR * ptr2, unsigned int msglen)
 {
-	char call[10];
-	int calllen;
-	int hops;
-	unsigned short rtt;
-	unsigned int len;
-	unsigned int opcode;
-	char alias[10] = "";
-	UCHAR IP[6];
-	int i;
+    char call[10];
+    int calllen;
+    int hops;
+    unsigned short rtt;
+    unsigned int len;
+    unsigned int opcode;
+    char alias[10] = "";
+    UCHAR IP[6];
+    int i;
 
-	ptr2 += sprintf(ptr2, " INP3 RIF:\r Alias  Call  Hops  RTT\r");
+    ptr2 += sprintf((char *)ptr2, " INP3 RIF:\r Alias  Call  Hops  RTT\r");
 
-	while (msglen > 0)
-	{
-		calllen = ConvFromAX25(ptr1, call);
-		call[calllen] = 0;
+    while (msglen > 0)
+    {
+        calllen = ConvFromAX25(ptr1, call);
+        call[calllen] = 0;
 
-		// Validate the call
+        // Validate the call
 
-		for (i = 0; i < calllen; i++)
-		{
-			if (!isupper(call[i]) && !isdigit(call[i]) && call[i] != '-')
-			{
-				ptr2 += sprintf(ptr2, " Corrupt RIF\r");
-				return ptr2;
-			}
-		}
+        for (i = 0; i < calllen; i++)
+        {
+            if (!isupper(call[i]) && !isdigit(call[i]) && call[i] != '-')
+            {
+                ptr2 += sprintf((char *)ptr2, " Corrupt RIF\r");
+                return ptr2;
+            }
+        }
 
-		ptr1 += 7;
+        ptr1 += 7;
 
-		hops = *ptr1++;
-		rtt = (*ptr1++ << 8);
-		rtt += *ptr1++;
+        hops = *ptr1++;
+        rtt = (*ptr1++ << 8);
+        rtt += *ptr1++;
 
-		IP[0] = 0;
-		strcpy(alias, "      ");
+        IP[0] = 0;
+        strcpy(alias, "      ");
 
-		msglen -= 10;
+        msglen -= 10;
 
-		while (*ptr1 && msglen > 0)
-		{
-			len = *ptr1;
-			opcode = *(ptr1 + 1);
+        while (*ptr1 && msglen > 0)
+        {
+            len = *ptr1;
+            opcode = *(ptr1 + 1);
 
-			if (len < 2 || len > msglen)
-			{
-				ptr2 += sprintf(ptr2, " Corrupt RIF\r");
-				return ptr2;
-			}
-			if (opcode == 0 && len < 9)
-			{
-				memcpy(&alias[6 - (len - 2)], ptr1 + 2, len - 2);		// Right Justiify
-			}
-			else
-				if (opcode == 1 && len < 8)
-				{
-					memcpy(IP, ptr1 + 2, len - 2);
-				}
+            if (len < 2 || len > msglen)
+            {
+                ptr2 += sprintf((char *)ptr2, " Corrupt RIF\r");
+                return ptr2;
+            }
+            if (opcode == 0 && len < 9)
+            {
+                memcpy(&alias[6 - (len - 2)], ptr1 + 2, len - 2);		// Right Justiify
+            }
+            else
+                if (opcode == 1 && len < 8)
+                {
+                    memcpy(IP, ptr1 + 2, len - 2);
+                }
 
-			ptr1 += len;
-			msglen -= len;
-		}
+            ptr1 += len;
+            msglen -= len;
+        }
 
-		if (IP[0])
-			ptr2 += sprintf(ptr2, " %s:%s %d %4.2d %d.%d.%d.%d\r", alias, call, hops, rtt, IP[0], IP[1], IP[2], IP[3]);
-		else
-			ptr2 += sprintf(ptr2, " %s:%s %d %4.2d\r", alias, call, hops, rtt);
+        if (IP[0])
+            ptr2 += sprintf((char *)ptr2, " %s:%s %d %4.2d %d.%d.%d.%d\r", alias, call, hops, rtt, IP[0], IP[1], IP[2], IP[3]);
+        else
+            ptr2 += sprintf((char *)ptr2, " %s:%s %d %4.2d\r", alias, call, hops, rtt);
 
-		ptr1++;
-		msglen--;		// EOP
-	}
+        ptr1++;
+        msglen--;		// EOP
+    }
 
-	return ptr2;
+    return ptr2;
 }
 
 

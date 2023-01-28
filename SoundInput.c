@@ -3,12 +3,13 @@
 #include <math.h>
 #include "ARDOPC.h"
 
-#pragma warning(disable : 4244)		// Code does lots of float to int
+//#pragma warning(disable : 4244)		// Code does lots of float to int
 
 #ifndef TEENSY
 #define MEMORYARQ
 #endif
 
+#define UNUSED(x) (void)(x)
 #undef PLOTWATERFALL
 
 #ifdef PLOTWATERFALL
@@ -40,6 +41,7 @@ void updateDisplay();
 VOID L2Routine(UCHAR * Packet, int Length, int FrameQuality, int totalRSErrors, int NumCar, int pktRXMode);
 void RemoveProcessedOFDMData();
 BOOL  CheckCRC16(unsigned char * Data, int Length);
+void ProcessPktFrame(int snd_ch, UCHAR * Data, int frameLen);
 
 void DrawAxes(int Qual, const char * Frametype, char * Mode);
 
@@ -246,7 +248,7 @@ const char Bad[MAXCAR] = {0};	// All bad
 
 UCHAR bytFrameData[10][MAX_RAW_LENGTH + 10];		// Received chars
 
-char CarrierOk[MAXCAR];		// RS OK Flags per carrier
+UCHAR CarrierOk[MAXCAR];		// RS OK Flags per carrier
 int RepeatedFrame = 0;		// set if this dats frame is a repeat
 
 int charIndex = 0;			// Index into received chars
@@ -347,16 +349,16 @@ void PrintCarrierFlags()
 
 	else
 	{
-		sprintf(Msg, "MEMARQ Flags %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d",
-			CarrierOk[0], CarrierOk[1], CarrierOk[2], CarrierOk[3], CarrierOk[4], CarrierOk[5], CarrierOk[6], CarrierOk[7], CarrierOk[8], CarrierOk[9],
-			CarrierOk[10], CarrierOk[11], CarrierOk[12], CarrierOk[13], CarrierOk[14], CarrierOk[15], CarrierOk[16], CarrierOk[17], CarrierOk[18], CarrierOk[19],
-			CarrierOk[20], CarrierOk[21], CarrierOk[22], CarrierOk[23], CarrierOk[24], CarrierOk[25], CarrierOk[26], CarrierOk[27], CarrierOk[28], CarrierOk[29],
-			CarrierOk[30], CarrierOk[31], CarrierOk[32], CarrierOk[33], CarrierOk[34], CarrierOk[35], CarrierOk[36], CarrierOk[37], CarrierOk[38], CarrierOk[39],
-			CarrierOk[40], CarrierOk[41], CarrierOk[42]);
+        sprintf(Msg, "MEMARQ Flags %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu %hhu",
+            CarrierOk[0], CarrierOk[1], CarrierOk[2], CarrierOk[3], CarrierOk[4], CarrierOk[5], CarrierOk[6], CarrierOk[7], CarrierOk[8], CarrierOk[9],
+            CarrierOk[10], CarrierOk[11], CarrierOk[12], CarrierOk[13], CarrierOk[14], CarrierOk[15], CarrierOk[16], CarrierOk[17], CarrierOk[18], CarrierOk[19],
+            CarrierOk[20], CarrierOk[21], CarrierOk[22], CarrierOk[23], CarrierOk[24], CarrierOk[25], CarrierOk[26], CarrierOk[27], CarrierOk[28], CarrierOk[29],
+            CarrierOk[30], CarrierOk[31], CarrierOk[32], CarrierOk[33], CarrierOk[34], CarrierOk[35], CarrierOk[36], CarrierOk[37], CarrierOk[38], CarrierOk[39],
+            CarrierOk[40], CarrierOk[41], CarrierOk[42]);
 	
 		Msg[12 + 2 * intNumCar] = 0; 
 		Debugprintf(Msg);
-	}
+    }
 
 }
 
@@ -365,7 +367,8 @@ void PrintCarrierFlags()
   
 BOOL IsShortControlFrame(UCHAR bytType)
 {
-	switch (intFrameType)
+    UNUSED(bytType);
+    switch (intFrameType)
 	{
 	case DataNAK:
 	case DataNAKLoQ:
@@ -576,7 +579,7 @@ void Filter150Hz(short * intFilterOut)
 	static int intN = 120;				//Length of filter 12000/100
 	static float dblRn;
 	static float dblR2;
-	static float dblCoef[17] = {0.0};			// the coefficients
+    static float dblCoef[18] = {0.0};			// the coefficients
 	float dblZin = 0, dblZin_1 = 0, dblZin_2 = 0, dblZComb= 0;  // Used in the comb generator
 	// The resonators 
       
@@ -588,6 +591,7 @@ void Filter150Hz(short * intFilterOut)
 
 	float FilterOut = 0;			//  Filtered sample
 	float largest = 0;
+    UNUSED(largest);
 
 	dblRn = powf(dblR, intN);
 
@@ -643,6 +647,7 @@ void Filter150Hz(short * intFilterOut)
 
 void Filter75Hz(short * intFilterOut, BOOL blnInitialise, int intSamplesToFilter)
 {
+    UNUSED(blnInitialise);
 	// assumes sample rate of 12000
 	// implements  3 100 Hz wide sections   (~150 Hz wide @ - 30dB centered on 1500 Hz)
 
@@ -663,7 +668,7 @@ void Filter75Hz(short * intFilterOut, BOOL blnInitialise, int intSamplesToFilter
 	int i, j;
 
 	float FilterOut = 0;			//  Filtered sample
-	float largest = 0;
+    float largest = 0; UNUSED(largest);
 
 	dblRn = powf(dblR, intN);
 
@@ -673,7 +678,7 @@ void Filter75Hz(short * intFilterOut, BOOL blnInitialise, int intSamplesToFilter
     
 	if (dblCoef[2] == 0)
 	{
-		for (i = 0; i <= 3; i++)
+        for (i = 0; i < 3; i++)
 		{
 			dblCoef[i] = 2 * dblR * cosf(2 * M_PI * (29 + i)/ intN);  // For Frequency = bin 29, 30, 31
 		}
@@ -826,7 +831,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 
 		if (OK && bytRawData[0] <= intDataLen) // Now OK -  return the actual data
 		{
-			int intFailedByteCnt = 0;
+            int intFailedByteCnt = 0; UNUSED(intFailedByteCnt);
 
 			if (strFrameType[intFrameType][0] == 'O')
 				Debugprintf("[CorrectRawDataWithRS] Carrier %d OK with RS %d corrections, Block %d, Len = %d", Carrier, NErrors, bytRawData[1], bytRawData[0]);
@@ -1287,16 +1292,20 @@ ProcessFrame:
 #ifdef HASPOTS
 			CheckandAdjustRXLevel(lastmax, lastmin, TRUE);
 #endif
-			if (AccumulateStats)
-				if (IsDataFrame(intFrameType))
-					if (strstr (strMod, "PSK"))
+            if (AccumulateStats)
+            {
+                if (IsDataFrame(intFrameType))
+                {
+                    if (strstr (strMod, "PSK"))
 						intGoodPSKFrameDataDecodes++;
-					else if (strstr (strMod, "QAM"))
+                    else if (strstr (strMod, "QAM"))
 						intGoodQAMFrameDataDecodes++;
-					else if (strstr (strMod, "OFDM"))
+                    else if (strstr (strMod, "OFDM"))
 						intGoodOFDMFrameDataDecodes++;
-					else	
+                    else
 						intGoodFSKFrameDataDecodes++;
+                }
+            }
 
 #ifdef TEENSY
 			if (IsDataFrame(intFrameType))
@@ -1310,8 +1319,8 @@ ProcessFrame:
 		{
 			//	Bad decode
 
-			if (AccumulateStats)
-				if (IsDataFrame(intFrameType))
+            if (AccumulateStats) {
+                if (IsDataFrame(intFrameType)) {
 					if (strstr(strMod, "PSK"))
 						intFailedPSKFrameDataDecodes++;
 					else if (strstr(strMod, "QAM"))
@@ -1320,12 +1329,14 @@ ProcessFrame:
 						intFailedOFDMFrameDataDecodes++;
 					else
 						intFailedFSKFrameDataDecodes++;
+                }
+            }
 
 
 			// Debug.WriteLine("[DecodePSKData2] bytPass = " & Format(bytPass, "X"))
 
 		}
-skipDecode:			
+//skipDecode:
 		State = SearchingForLeader;
 		ClearAllMixedSamples();
 		DiscardOldSamples();
@@ -1666,18 +1677,21 @@ BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetH
 	float dblGoertzelImag[56];
 	float dblMag[56];
 	float dblPower, dblLeftMag, dblRightMag;
-	float dblMaxPeak = 0.0, dblMaxPeakSN = 0.0, dblBinAdj;
+    float dblMaxPeak = 0.0, dblMaxPeakSN = 0.0, dblBinAdj = 0.0;
 	int intInterpCnt = 0;  // the count 0 to 3 of the interpolations that were < +/- .5 bin
 	int  intIatMaxPeak = 0;
 	float dblAlpha = 0.3f;  // Works well possibly some room for optimization Changed from .5 to .3 on Rev 0.1.5.3
+    UNUSED(dblAlpha);
 	float dblInterpretThreshold= 1.0f; // Good results June 6, 2014 (was .4)  ' Works well possibly some room for optimization
 	float dblFilteredMaxPeak = 0;
+    UNUSED(dblFilteredMaxPeak);
 	int intStartBin, intStopBin;
 	float dblLeftCar, dblRightCar, dblBinInterpLeft, dblBinInterpRight, dblCtrR, dblCtrI, dblLeftP, dblRightP;
 	float dblLeftR[3], dblLeftI[3], dblRightR[3], dblRightI[3];
 	int i;
 	int Ptr = 0;
 	float dblAvgNoisePerBin, dblCoarsePwrSN, dblBinAdj1475, dblBinAdj1525, dblCoarseOffset = 1000;
+    UNUSED(dblCoarsePwrSN);
 	float dblTrialOffset, dblPowerEarly, dblSNdBPwrEarly;
 
 	if ((Length) < 1200)
@@ -1885,7 +1899,7 @@ BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetH
 			// The following demonstrated good detection down to -10 dB S:N with squelch = 3 and minimal false triggering. 
 			// Added rev 0.8.2.2 11/6/2016 RM
 
-			if (abs(dblPriorFineOffset - *dblOffsetHz) < 2.9f)
+            if (fabsf(dblPriorFineOffset - *dblOffsetHz) < 2.9f)
 			{
 				Debugprintf("Prior-Offset= %f", (dblPriorFineOffset - *dblOffsetHz));
                    		
@@ -1936,18 +1950,23 @@ BOOL SearchFor2ToneLeader4(short * intNewSamples, int Length, float * dblOffsetH
 	float dblGoertzelReal[45];
 	float dblGoertzelImag[45];
 	float dblMag[45];
-	float dblPower, dblPwrSNdB, dblLeftMag, dblRightMag, dblAvgNoisePerBinAtPeak;
+    float dblPower, dblPwrSNdB, dblLeftMag, dblRightMag, dblAvgNoisePerBinAtPeak = 0.0;
 	float dblRealL, dblRealR, dblImagL, dblImagR;
 	float dblMaxPeak = 0.0, dblMaxPeakSN = 0.0, dblMagWindow;
 	int intInterpCnt = 0;  // the count 0 to 3 of the interpolations that were < +/- .5 bin
+    UNUSED(intInterpCnt);
 	int  intIatMaxPeak = 0;
 	float dblAlpha = 0.3f;  // Works well possibly some room for optimization Changed from .5 to .3 on Rev 0.1.5.3
+    UNUSED(dblAlpha);
 	float dblInterpretThreshold= 1.0f; // Good results June 6, 2014 (was .4)  ' Works well possibly some room for optimization
+    UNUSED(dblInterpretThreshold);
 	float dblFilteredMaxPeak = 0;
+    UNUSED(dblFilteredMaxPeak);
 	int intStartBin, intStopBin;
 	int i;
 	int Ptr = 0;
 	float dblAvgNoisePerBin, dblBinAdj1475, dblBinAdj1525, dblCoarseOffset = 1000;
+    UNUSED(dblCoarseOffset);
 	float dblOffset = 1000; //  initialize to impossible value
 
 	// This should allow tunning from nominal bins at 1425Hz to 1575Hz +/- 200 Hz tuning range
@@ -1962,7 +1981,7 @@ BOOL SearchFor2ToneLeader4(short * intNewSamples, int Length, float * dblOffsetH
 	intStartBin = ((200 - TuningRange) / 12.5);
 	intStopBin = 44 - intStartBin;
 
-	dblMaxPeak = 0;
+    // dblMaxPeak = 0;
 	dblMagWindow = 0;
 	dblMaxPeakSN = -100;
     
@@ -2097,10 +2116,10 @@ BOOL Acquire2ToneLeaderSymbolFraming()
 	int intLocalPtr = intMFSReadPtr;  // try advancing one symbol to minimize initial startup errors 
 	float dblAbsPhErr;
 	float dblMinAbsPhErr = 5000;	 // initialize to an excessive value
-	int intIatMinErr;
-	float dblPhaseAtMinErr;
-	int intAbsPeak = 0;
-	int intJatPeak = 0;
+    int intIatMinErr = 0.0;
+    float dblPhaseAtMinErr; UNUSED(dblPhaseAtMinErr);
+    int intAbsPeak = 0; UNUSED(intAbsPeak);
+    int intJatPeak = 0; UNUSED(intJatPeak);
 	int i;
 
 	// Use Phase of 1500 Hz leader  to establish symbol framing. Nominal phase is 0 or 180 degrees
@@ -2123,7 +2142,7 @@ BOOL Acquire2ToneLeaderSymbolFraming()
 	
 		GoertzelRealImagHann120(intFilteredMixedSamples, intLocalPtr + i, 240, 30, &dblReal, &dblImag); // Carrier at 1500 Hz nominal Positioning 
 		dblCarPh = atan2f(dblImag, dblReal);
-		dblAbsPhErr = fabsf(dblCarPh - (ceil(dblCarPh / M_PI) * M_PI));
+        dblAbsPhErr = fabs(dblCarPh - (ceil(dblCarPh / M_PI) * M_PI));
 		if (dblAbsPhErr < dblMinAbsPhErr)
 		{
 			dblMinAbsPhErr = dblAbsPhErr;
@@ -2156,7 +2175,9 @@ int EnvelopeCorrelator()
 
 	float dblCorMax  = -1000000.0f;		//  Preset to excessive values
 	float dblCorMin  = 1000000.0f;
+    UNUSED(dblCorMin);
 	int intJatMax = 0, intJatMin = 0;
+    UNUSED(intJatMin);
 	float dblCorSum, dblCorProduct, dblCorMaxProduct = 0.0;
 	int i,j;
 	short int75HzFiltered[720];
@@ -2208,7 +2229,9 @@ int EnvelopeCorrelatorNew()
 
 	float dblCorMax  = -1000000.0f;		//  Preset to excessive values
 	float dblCorMin  = 1000000.0f;
+    UNUSED(dblCorMin);
 	int intJatMax = 0, intJatMin = 0;
+    UNUSED(intJatMin);
 	float dblCorSum, dblCorProduct, dblCorMaxProduct = 0.0;
 	int i,j;
 	short int75HzFiltered[960];
@@ -2530,7 +2553,7 @@ UCHAR GetFrameTypeByte(int intTonePtr, int * intToneMags)
 {
 	// Demodulate the byte pointed to postion of tone PTR and return it
 	 
-	UCHAR bytData = 0, bytParity, bytSym;
+    UCHAR bytData = 0, bytParity = 0, bytSym = 0;
     int intIndex = intTonePtr;
 	int j;
 
@@ -2659,8 +2682,8 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 
 	}
 
-	sprintf(strDecodeCapture, "%s MD Decode;12  Type1=H%X: Type2=H%X: , D1= %.2f, D2= %.2f",
-		strDecodeCapture, intIatMinDistance1 , intIatMinDistance2, dblMinDistance1, dblMinDistance2);
+    sprintf(strDecodeCapture, "%s MD Decode;12 Type1=H%X: Type2=H%X:, D1= %.2f, D2= %.2f",
+         strDecodeCapture, intIatMinDistance1, intIatMinDistance2, dblMinDistance1, dblMinDistance2);
 	Debugprintf("[Frame Type Decode Fail] %s", strDecodeCapture);
 	return -1; // indicates poor quality decode so  don't use
 }
@@ -2703,16 +2726,18 @@ int Acquire4FSKFrameType()
   
 
 	sprintf(Offset, "Offset %5.1f", dblOffsetHz);
-	SendtoGUI('O', Offset, strlen(Offset));
+    SendtoGUI('O', (UCHAR *)Offset, strlen(Offset));
 
 	if (NewType >= 0 &&  IsShortControlFrame(NewType))		// update the constellation if a short frame (no data to follow)
 		Update4FSKConstellation(&intToneMags[0][0], &intLastRcvdFrameQuality);
 
-	if (AccumulateStats)
+    if (AccumulateStats)
+    {
 		if (NewType >= 0)
 			intGoodFSKFrameTypes++;
 		else
 			intFailedFSKFrameTypes++;
+    }
 	
 	intMFSReadPtr += (240 * 8);			 // advance to read pointer to the next symbol (if there is one)
 	
@@ -2851,7 +2876,7 @@ void Demod1Car4FSKChar(int Start, UCHAR * Decoded, int Carrier)
 
 	float dblReal, dblImag;
 	float dblSearchFreq;
-	float dblMagSum = 0;
+    float dblMagSum = 0; UNUSED(dblMagSum);
 	float  dblMag[4];	// The magnitude for each of the 4FSK frequency bins
 	UCHAR bytSym;
 	static UCHAR bytSymHistory[3];
@@ -2962,7 +2987,7 @@ void DemodulateFrame(int intFrameType)
 {
  //       Dim stcStatus As Status = Nothing
 
-	int intConstellationQuality = 0;
+    int intConstellationQuality = 0; UNUSED(intConstellationQuality);
 
  //       ReDim bytData(-1)
 
@@ -3049,12 +3074,13 @@ int intSNdB = 0, intQuality = 0;
 
 BOOL DecodeFrame(int xxx, UCHAR * bytData)
 {
-	BOOL blnDecodeOK = FALSE;
-	char strCallerCallsign[10] = "";
-	char strTargetCallsign[10] = "";
-	char strIDCallSign[11] = "";
-	char strGridSQ[20] = "";
-	char Reply[80];
+    UNUSED(bytData); UNUSED(xxx);
+    BOOL blnDecodeOK = FALSE;
+    char strCallerCallsign[10] = ""; UNUSED(strCallerCallsign);
+    char strTargetCallsign[10] = ""; UNUSED(strTargetCallsign);
+    char strIDCallSign[11] = ""; UNUSED(strIDCallSign);
+    char strGridSQ[20] = ""; UNUSED(strGridSQ);
+    char Reply[80]; UNUSED(Reply);
 	
 	strRcvFrameTag[0] = 0;
 
@@ -3237,11 +3263,11 @@ void Update4FSKConstellation(int * intToneMags, int * intQuality)
 	// Subroutine to update bmpConstellation plot for 4FSK modes...
         
 	int intToneSum = 0;
-	int intMagMax = 0;
-	float dblPi4  = 0.25 * M_PI;
+    int intMagMax = 0; UNUSED(intMagMax);
+    float dblPi4  = 0.25 * M_PI; UNUSED(dblPi4);
 	float dblDistanceSum = 0;
 	int intRad = 0;
-	int i, x, y;
+    int i, x, y; UNUSED(x); UNUSED(y);
 	int yCenter = 0;
 	int xCenter = 0;
 
@@ -3343,11 +3369,11 @@ void Update16FSKConstellation(int * intToneMags, int * intQuality)
 	int	intToneSum = 0;
 	float intMagMax = 0;
 	float dblDistanceSum = 0;
-	float dblPlotRotation = 0;
+    float dblPlotRotation = 0; UNUSED(dblPlotRotation);
 //            Dim stcStatus As Status
 	int	intRad;
 //            Dim clrPixel As System.Drawing.Color
-	int	intJatMaxMag;
+    int	intJatMaxMag; UNUSED(intJatMaxMag);
 	int i, j;
 
 #ifdef PLOTCONSTELLATION
@@ -3420,10 +3446,10 @@ void Update8FSKConstellation(int * intToneMags, int * intQuality)
          
 	int intToneSum = 0;
 	int intMagMax = 0;
-	float dblPi4  = 0.25 * M_PI;
+    float dblPi4  = 0.25 * M_PI; UNUSED(dblPi4);
 	float dblDistanceSum = 0;
 	int intRad = 0;
-	int i, j, intJatMaxMag;
+    int i, j, intJatMaxMag; UNUSED(intJatMaxMag);
 
 #ifdef PLOTCONSTELLATION
 
@@ -3500,13 +3526,13 @@ int UpdatePhaseConstellation(short * intPhases, short * intMag, int intPSKPhase,
 	float dblPhaseErrorSum = 0;
 	int intPSKIndex;
 	float intP = 0;
-	float dblRad = 0;
+    float dblRad = 0; UNUSED(dblRad);
 	float dblAvgRad = 0;
 	float intMagMax = 0;
-	float dblPi4 = 0.25 * M_PI;
+    float dblPi4 = 0.25 * M_PI; UNUSED(dblPi4);
 	float dbPhaseStep;
-	float dblRadError = 0;
-	float dblPlotRotation = 0;
+    float dblRadError = 0;UNUSED(dblRadError);
+    float dblPlotRotation = 0;UNUSED(dblPlotRotation);
 	int intRadInner = 0, intRadOuter = 0;
 	float dblAvgRadOuter = 0, dblAvgRadInner = 0, dblRadErrorInner = 0, dblRadErrorOuter = 0;
  
@@ -3578,7 +3604,7 @@ int UpdatePhaseConstellation(short * intPhases, short * intMag, int intPSKPhase,
 		else
 			dblRadErrorInner += fabsf(dblAvgRadInner - intMag[i]);
 
-		dblPhaseError = fabsf(((0.001 * intPhases[i]) - intP * dbPhaseStep)); // always positive and < .5 *  dblPhaseStep
+        dblPhaseError = fabs(((0.001 * intPhases[i]) - intP * dbPhaseStep)); // always positive and < .5 *  dblPhaseStep
 		dblPhaseErrorSum += dblPhaseError;
 
 #ifdef PLOTCONSTELLATION
@@ -3666,14 +3692,14 @@ VOID Track1Car4FSK(short * intSamples, int * intPtr, int intSampPerSymbol, float
 
 	if (dblMagEarly > dblMag && dblMagEarly > dblMagLate)
 	{
-		*intPtr --;
+        (*intPtr)--;
 		Corrections--;
 		if (AccumulateStats)
 			intAccumFSKTracking--;
 	}
 	else if (dblMagLate > dblMag && dblMagLate > dblMagEarly)
 	{
-		*intPtr ++;
+        (*intPtr)++;
 		Corrections++;
 		if (AccumulateStats)
 			intAccumFSKTracking++;
@@ -3878,11 +3904,11 @@ int Track1CarPSK(int floatCarFreq, int PSKMode, BOOL QAM, BOOL OFDM, float dblUn
 
 	float dblPhaseOffset;
 
-	static float dblTrackingPhase = 0;
+    static float dblTrackingPhase = 0; UNUSED(dblTrackingPhase);
 	static float dblModFactor;
 	static float dblRadiansPerSample;  // range is .4188 @ car freq = 800 to 1.1195 @ car freq 2200
 	static float dblPhaseAtLastTrack;
-	static int intCountAtLastTrack;
+    static int intCountAtLastTrack; UNUSED(intCountAtLastTrack);
 	static float dblFilteredPhaseOffset;
 
 	if (blnInit)
@@ -4090,7 +4116,7 @@ VOID Decode1CarQAM(int Carrier)
 {
 	unsigned int intData;
 	int k;
-	float dblAlpha = 0.1f; // this determins how quickly the rolling average dblTrackingThreshold responds.
+    float dblAlpha = 0.1f; UNUSED(dblAlpha); // this determins how quickly the rolling average dblTrackingThreshold responds.
 
 	// dblAlpha value of .1 seems to work well...needs to be tested on fading channel (e.g. Multipath)
 	
@@ -4545,7 +4571,7 @@ int Demod1CarPSKChar(int Start, int Carrier)
 	//	This is called for one DMA buffer of samples (normally 1200)
 
 	float dblReal, dblImag;
-	int intMiliRadPerSample = floatCarFreq * M_PI / 6;
+    int intMiliRadPerSample = floatCarFreq * M_PI / 6; UNUSED(intMiliRadPerSample);
 	int i;
 	int intNumOfSymbols = intPSKMode;
 	int origStart = Start;;
@@ -5025,7 +5051,7 @@ int Demod1CarQAMChar(int Start, int Carrier)
 	//	This is called for one DMA buffer of samples (normally 1200)
 
 	float dblReal, dblImag;
-	int intMiliRadPerSample = floatCarFreq * M_PI / 6;
+    int intMiliRadPerSample = floatCarFreq * M_PI / 6; UNUSED(intMiliRadPerSample);
 	int i;
 	int intNumOfSymbols = 2;
 	int origStart = Start;;
@@ -5079,6 +5105,7 @@ extern int bytQDataInProcessLen;
 
 BOOL Decode1Car4FSKFromTones(UCHAR * bytData, int intToneMags)
 {
+    UNUSED(bytData); UNUSED(intToneMags);
 	//	Decodes intToneMags() to an array of bytes   
     //	Updates bytData() with decoded 
 

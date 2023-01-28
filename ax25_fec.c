@@ -148,6 +148,7 @@ int FX25_MIN(int a, int b)
 
 int decode_rs(Byte * data, int * eras_pos, int no_eras, int pad)
 {
+    UNUSED(eras_pos);
 	int  deg_lambda, el, deg_omega;
 	int   i, j, r, k;
 	Byte  q, tmp, num1, num2, den, discr_r;
@@ -347,6 +348,7 @@ int decode_rs(Byte * data, int * eras_pos, int no_eras, int pad)
 
 void fx25_encode_rs(Byte * data, Byte *parity, int pad, int rs_size)
 {
+    UNUSED(pad);
 	switch (rs_size)
 	{
 	case 8:

@@ -210,7 +210,7 @@ int pa_get_devicelist(pa_devicelist_t *input, pa_devicelist_t *output) {
 	// Define our pulse audio loop and connection variables
 	pa_mainloop *pa_ml;
 	pa_mainloop_api *pa_mlapi;
-	pa_operation *pa_op;
+    pa_operation *pa_op = 0;
 	pa_context *pa_ctx;
 
 
@@ -381,7 +381,7 @@ pa_simple * OpenPulsePlayback(char * Server)
 	if (s == 0)
 		printf("Playback pa_simple_new() failed: %s\n", ppa_strerror(error));
 	else
-		printf("Playback Handle %x\n", (unsigned int)s);
+        printf("Playback Handle %p\n", (void *)s);
 
 	return s;
 }
@@ -418,7 +418,7 @@ pa_simple * OpenPulseCapture(char * Server)
 	if (s == 0)
 		printf("Capture pa_simple_new() failed: %s\n", ppa_strerror(error));
 	else
-		printf("Capture Handle %x\n", (unsigned int)s);
+        printf("Capture Handle %p\n", (void *)s);
 
 	return s;
 }

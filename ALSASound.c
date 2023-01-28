@@ -1686,8 +1686,6 @@ int gpioInitialise(void)
 	
 #endif
 
-
-
 int stricmp(const unsigned char * pStr1, const unsigned char *pStr2)
 {
     unsigned char c1, c2;

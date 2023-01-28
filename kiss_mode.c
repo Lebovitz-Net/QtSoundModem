@@ -50,6 +50,8 @@ int KISSConCount = 0;
 #define KISS_ACKMODE 0x0C
 #define KISS_DATA 0
 
+extern int add_raw_frames(int snd_ch, string * frame, TStringList * buf);
+
 struct TKISSMode_t  KISS;
 
 int KISS_encode(UCHAR * KISSBuffer, int port, string * frame, int TXMON);
@@ -91,11 +93,11 @@ void KISS_add_stream(void * Socket)
 {
 	// Add a new connection. Called when QT accepts an incoming call}
 
-	TKISSMode * KISS;
+    TKISSMode * KISS;
 
 	KissConnections = realloc(KissConnections, (KISSConCount + 1) * sizeof(void *));
 
-	KISS = KissConnections[KISSConCount++] = malloc(sizeof(KISS));
+    KISS = KissConnections[KISSConCount++] = (TKISSMode *)malloc(sizeof(*KISS));
 
 	KISS->Socket = Socket;
 	KISS->data_in = newString();
