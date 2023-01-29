@@ -1781,7 +1781,7 @@ VOID COMClearRTS(HANDLE fd)
 
 HANDLE OpenCOMPort(char * Port, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet, int Stopbits)
 {
-	char buf[100];
+    char buf[101]; // this is sizeof(fulldev) + sizeof("  could not be opened")
 
 	//	Linux Version.
 
@@ -1794,20 +1794,21 @@ HANDLE OpenCOMPort(char * Port, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet,
 
 	UNUSED(Stopbits);
 
-	sprintf(fulldev, "/dev/%s", Port);
+    sprintf(fulldev, "/dev/%s", Port);
 
-	printf("%s\n", fulldev);
+    printf("%s\n", fulldev);
 
-	if ((fd = open(fulldev, O_RDWR | O_NDELAY)) == -1)
-	{
-		if (Quiet == 0)
-		{
-			perror("Com Open Failed");
-			sprintf(buf, " %s could not be opened", (char *)fulldev);
-			Debugprintf(buf);
-		}
-		return 0;
-	}
+    if ((fd = open(fulldev, O_RDWR | O_NDELAY)) == -1)
+    {
+            if (Quiet == 0)
+            {
+                    perror("Com Open Failed");
+                    sprintf(buf, " %s could not be opened", (char *)fulldev);
+                    Debugprintf(buf);
+            }
+            return 0;
+    }
+
 
 	// Validate Speed Param
 
