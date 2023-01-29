@@ -9,6 +9,8 @@
 
 #include "ARDOPC.h"
 
+#define UNUSED(x) (void)(x)
+
 VOID SortSignals2(float * dblMag, int intStartBin, int intStopBin, int intNumBins, float *  dblAVGSignalPerBin, float *  dblAVGBaselinePerBin);
 
 int LastBusyOn;
@@ -59,7 +61,7 @@ BOOL BusyDetect2(float * dblMag, int intStart, int intStop)        // this only 
 	float dblSlowAlpha = 0.2f;
 	float dblAvgStoNNarrow, dblAvgStoNWide;
 	int intNarrow = 8;  // 8 x 11.72 Hz about 94 z
-	int intWide = ((intStop - intStart) * 2) / 3; //* 0.66);
+    int intWide = ((intStop - intStart) * 2) / 3; // 0.66);
 	int blnBusy = FALSE;
 	float dblAvgStoNSlowNarrow = 0;
 	float dblAvgStoNFastNarrow = 0;
@@ -244,6 +246,9 @@ BOOL BusyDetect3(float * dblMag, int intStart, int intStop)        // this only 
 
 	case XB2500:
 		blnBusy = (dblAvgStoNNarrow > (3 + 0.008 * BusyDet4th)) || (dblAvgStoNWide > (5 + 0.016 * BusyDet4th));
+        break;
+    default:
+        break;
  	}
 
 	if (BusyDet == 0)
@@ -275,7 +280,7 @@ BOOL BusyDetect3(float * dblMag, int intStart, int intStop)        // this only 
 	}
 	else
 	{
-		if (blnLastBusy && (Now - dttLastTrip) > intHoldMs && intBusyOffCnt >= 3)
+        if (blnLastBusy && (((int)Now - dttLastTrip) > intHoldMs) && intBusyOffCnt >= 3)
 		{
 			dttLastBusyClear = Now;
 			blnLastBusy = False;
@@ -290,12 +295,12 @@ VOID SortSignals(float * dblMag, int intStartBin, int intStopBin, int intNumBins
     // for decent accuracy intNumBins should be < 75% of intStopBin-intStartBin)
 
 	float dblAVGSignal[200] = {0};//intNumBins
-	float dblAVGBaseline[200] = {0};//intStopBin - intStartBin - intNumBins
+    float dblAVGBaseline[200] = {0};UNUSED(dblAVGBaseline);//intStopBin - intStartBin - intNumBins
 
 	float dblSigSum = 0;
 	float dblTotalSum = 0;
-	int intSigPtr = 0;
-	int intBasePtr = 0;
+    int intSigPtr = 0;UNUSED(intSigPtr);
+    int intBasePtr = 0;UNUSED(intBasePtr);
 	int i, j, k;
 
 	for (i = 0; i <  intNumBins; i++)
