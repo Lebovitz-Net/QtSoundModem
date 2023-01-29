@@ -2596,11 +2596,14 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 	float dblMinDistance1 = 5; // minimal distance for the first byte initialize to large value
 	float dblMinDistance2 = 5; // minimal distance for the second byte initialize to large value
 	float dblMinDistance3 = 5; // minimal distance for the second byte under exceptional cases initialize to large value
-	int intIatMinDistance1, intIatMinDistance2, intIatMinDistance3;
-	float dblDistance1, dblDistance2, dblDistance3;
+    int intIatMinDistance1 = 0, intIatMinDistance2 = 0, intIatMinDistance3 = 0;
+    float dblDistance1 = 0.0, dblDistance2 = 0.0, dblDistance3 = 0.0;
 	int i;
+    int strDecodeLength = 0;
+    const int strDecodeSize = sizeof(strDecodeCapture);
 
 	strDecodeCapture[0] = 0;
+
 
 	if (ProtocolState == ISS)
 	{
@@ -2652,9 +2655,11 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 	{
 		if (intIatMinDistance1 == intIatMinDistance2 && ((dblMinDistance1 < 0.3) || (dblMinDistance2 < 0.3)))
 		{
-			sprintf(strDecodeCapture, "%s MD Decode;2 ID=H%X, Type=H%X:%s, D1= %.2f, D2= %.2f",
-				 strDecodeCapture, bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
-			Debugprintf("[Frame Type Decode OK  ] %s", strDecodeCapture);
+            strDecodeLength += snprintf(strDecodeCapture+strDecodeLength, strDecodeSize-strDecodeLength,
+                                       " MD Decode;2 ID=H%X, Type=H%X:%s, D1= %.2f, D2= %.2f",
+                                       bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
+
+            Debugprintf("[Frame Type Decode OK  ] %s", strDecodeCapture);
 			dblOffsetLastGoodDecode = dblOffsetHz;
 
 			return intIatMinDistance1;
@@ -2663,8 +2668,9 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 
 		if ((dblMinDistance1 < 0.3) && CheckFrameTypeParity(0, intToneMags)  && IsDataFrame(intIatMinDistance1) )	//  this would handle the case of monitoring an ARQ connection where the SessionID is not 0x3F
 		{
-			sprintf(strDecodeCapture, "%s MD Decode;3 ID=H%X, Type=H%X:%s, D1= %.2f, D2= %.2f",
-				 strDecodeCapture, bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
+            strDecodeLength += snprintf(strDecodeCapture+strDecodeLength, strDecodeSize-strDecodeLength,
+                                       " MD Decode;3 ID=H%X, Type=H%X:%s, D1= %.2f, D2= %.2f",
+                                        bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
 			Debugprintf("[Frame Type Decode OK  ] %s", strDecodeCapture);
 			
 			return intIatMinDistance1;
@@ -2672,8 +2678,9 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 
 		if ((dblMinDistance2 < 0.3) &&  CheckFrameTypeParity(16, intToneMags) && IsDataFrame(intIatMinDistance2))  // this would handle the case of monitoring an FEC transmission that failed above when the session ID is = 03F
  		{
-			sprintf(strDecodeCapture, "%s MD Decode;4 ID=H%X, Type=H%X:%s, D1= %.2f, D2= %.2f",
-				 strDecodeCapture, bytSessionID, intIatMinDistance1, Name(intIatMinDistance2), dblMinDistance1, dblMinDistance2);
+            strDecodeLength += snprintf(strDecodeCapture+strDecodeLength, strDecodeSize-strDecodeLength,
+                                        " MD Decode;4 ID=H%X, Type=H%X:%s, D1= %.2f, D2= %.2f",
+                                        bytSessionID, intIatMinDistance1, Name(intIatMinDistance2), dblMinDistance1, dblMinDistance2);
 			Debugprintf("[Frame Type Decode OK  ] %s", strDecodeCapture);
 
 			return intIatMinDistance2;
@@ -2682,8 +2689,9 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 
 	}
 
-    sprintf(strDecodeCapture, "%s MD Decode;12 Type1=H%X: Type2=H%X:, D1= %.2f, D2= %.2f",
-         strDecodeCapture, intIatMinDistance1, intIatMinDistance2, dblMinDistance1, dblMinDistance2);
+    strDecodeLength += snprintf(strDecodeCapture+strDecodeLength, strDecodeSize-strDecodeLength,
+                                " MD Decode;12 Type1=H%X: Type2=H%X:, D1= %.2f, D2= %.2f",
+                                intIatMinDistance1, intIatMinDistance2, dblMinDistance1, dblMinDistance2);
 	Debugprintf("[Frame Type Decode Fail] %s", strDecodeCapture);
 	return -1; // indicates poor quality decode so  don't use
 }
@@ -4031,7 +4039,7 @@ void CorrectPhaseForTuningOffset(short * intPhase, int intPhaseLength, int intPS
 	short intPhaseInc = 6284 / intPSKMode;
 	int intTest;
 	int i;
-	int intOffset, intAvgOffset, intAvgOffsetBeginning, intAvgOffsetEnd;
+    int intOffset = 0, intAvgOffset = 0, intAvgOffsetBeginning = 0, intAvgOffsetEnd = 0;
 	int intAccOffsetCnt = 0, intAccOffsetCntBeginning = 0, intAccOffsetCntEnd = 0;
 	int	intAccOffsetBeginning = 0, intAccOffsetEnd = 0, intAccOffset = 0;
 
