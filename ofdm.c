@@ -1503,6 +1503,7 @@ PktLoopBack:		// Reenter here to send rest of variable length packet frame
 			intCarStartIndex = 4;
 			//			dblCarScalingFactor = 1.0f; // Starting at 1500 Hz  (scaling factors determined emperically to minimize crest factor)  TODO:  needs verification
 			dblCarScalingFactor = 1.2f; // Starting at 1500 Hz  Selected to give < 13% clipped values yielding a PAPR = 1.6 Constellation Quality >98
+            break; // This was missing, not sure if that was intentional.
         case 2:
 			intCarStartIndex = 3;
 			//			dblCarScalingFactor = 0.53f;
