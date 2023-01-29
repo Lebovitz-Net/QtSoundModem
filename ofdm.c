@@ -72,7 +72,10 @@ For Comparison 16QAM.2500.100
 
 #include "ARDOPC.h"
 
-#pragma warning(disable : 4244)		// Code does lots of float to int
+#define UNUSED(x) (void)(x)
+void ARDOPSampleSink(short Sample);
+
+// #pragma warning(disable : 4244)		// Code does lots of float to int
 
 int OFDMMode;				// OFDM can use various modulation modes and redundancy levels
 int LastSentOFDMMode;		// For retries
@@ -219,7 +222,7 @@ BOOL DemodOFDM();
 
 void GenCRC16Normal(char * Data, int Length)
 {
-	unsigned int CRC = GenCRC16(Data, Length);
+    unsigned int CRC = GenCRC16((UCHAR *)Data, Length);
 
 	// Put the two CRC bytes after the stop index
 
@@ -237,7 +240,7 @@ void ClearOFDMVariables()
 	BytesSent = 0;
 	SavedOFDMMode = -1;
 
-	DontSendNewData = LimitNewData = Duplicate = 0;
+    DontSendNewData = LimitNewData = Duplicate = 0;
 	
 	memset(SentOFDMBlocks, 0, sizeof(SentOFDMBlocks));
 	memset(SentOFDMBlockLen, 0, sizeof(SentOFDMBlockLen));
@@ -285,7 +288,8 @@ resend:
 
 UCHAR * GetNextOFDMBlock(int Block, int intDataLen)
 {
-	return  0;  &bytDataToSend[Block * intDataLen];
+    UNUSED(Block); UNUSED(intDataLen);
+    return  0;  // &bytDataToSend[Block * intDataLen];
 }
 
 void GetOFDMFrameInfo(int OFDMMode, int * intDataLen, int * intRSLen, int * Mode, int * Symbols)
@@ -359,6 +363,7 @@ void GetOFDMFrameInfo(int OFDMMode, int * intDataLen, int * intRSLen, int * Mode
 
 int EncodeOFDMData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes)
 {
+    UNUSED(bytDataToSend);
 	//  Output is a byte array which includes:
 	//  1) A 2 byte Header which include the Frame ID.  This will be sent using 4FSK at 50 baud. It will include the Frame ID and ID Xored by the Session bytID.
 	//  2) n sections one for each carrier that will include all data (with FEC appended) for the entire frame. Each block will be identical in length.
@@ -537,7 +542,7 @@ repeatblocks:
 		Debugprintf("Sending OFDM Carrier %d Block %d Len %d", i,bytToRS[1], bytToRS[0]);
 		memcpy(&bytToRS[2], GetNextOFDMBlock(bytToRS[1], intDataLen), bytToRS[0]);
 	
-		GenCRC16Normal(bytToRS, intDataLen + 2); // calculate the CRC on the byte count + data bytes
+        GenCRC16Normal((char *)bytToRS, intDataLen + 2); // calculate the CRC on the byte count + data bytes
 
 		// Data + RS + 1 byte byteCount + 1 byte blockno + 2 Byte CRC
 		
@@ -636,7 +641,7 @@ VOID InitDemodOFDM()
 	// Called at start of frame
 
 	int i;
-	float dblPhase, dblReal, dblImag;
+    float dblPhase = 0.0, dblReal, dblImag;
 	short modePhase[MAXCAR][3];
 	int OFDMType[MAXCAR] = {0};
 	int ModeCount[8] = {0};
@@ -804,7 +809,7 @@ VOID Decode1CarOFDM(int Carrier)
 {
 	unsigned int intData;
 	int k;
-	float dblAlpha = 0.1f; // this determins how quickly the rolling average dblTrackingThreshold responds.
+    float dblAlpha = 0.1f;UNUSED(dblAlpha); // this determins how quickly the rolling average dblTrackingThreshold responds.
 
 	// dblAlpha value of .1 seems to work well...needs to be tested on fading channel (e.g. Multipath)
 	
@@ -873,8 +878,8 @@ BOOL DemodOFDM()
 {
 	int Used = 0;
 	int Start = 0;
-	int i, n, MemARQOk = 0;
-	int skip = rand() % intNumCar;
+    int i, n, MemARQOk = 0; UNUSED(MemARQOk);
+    int skip = rand() % intNumCar;UNUSED(skip);
 
 	// We can't wait for the full frame as we don't have enough RAM, so
 	// we do one DMA Buffer at a time, until we run out or end of frame
@@ -1073,7 +1078,7 @@ int Demod1CarOFDMChar(int Start, int Carrier, int intNumOfSymbols)
 	//	It demodulates one byte's worth of samples (2 or 4)
 
 	float dblReal, dblImag, dblPhase;
-	int intMiliRadPerSample = floatCarFreq * M_PI / 6;
+    int intMiliRadPerSample = floatCarFreq * M_PI / 6;UNUSED(intMiliRadPerSample);
 	int i;
 	int origStart = Start;
 //	int Corrections;
@@ -1153,7 +1158,7 @@ VOID EncodeAndSendOFDMACK(UCHAR bytSessionID, int LeaderLength, int Chan)
 		val >>= 8;
 	}
 
-	GenCRC16Normal(&bytEncodedBytes[2], 6);	// calculate the CRC
+    GenCRC16Normal((char *)&bytEncodedBytes[2], 6);	// calculate the CRC
 
 	RSEncode(&bytEncodedBytes[2], &bytEncodedBytes[10], 8, 4);  // Generate the RS encoding ...now 14 bytes total
 
@@ -1223,14 +1228,14 @@ void ModOFDMDataAndPlay(unsigned char * bytEncodedBytes, int Len, int intLeaderL
 	char strType[18] = "";
 	char strMod[16] = "";
 	UCHAR bytSym, bytSymToSend, bytMinQualThresh;
-	float dblCarScalingFactor;
-	int intMask = 0;
-	int intLeaderLenMS;
+    float dblCarScalingFactor;UNUSED(dblCarScalingFactor);
+    int intMask = 0;UNUSED(intMask);
+    int intLeaderLenMS;UNUSED(intLeaderLenMS);
 	int i, j, k, s, n;
 	int intCarStartIndex;
-	int intPeakAmp;
+    int intPeakAmp;UNUSED(intPeakAmp);
 	int intCarIndex;
-	BOOL QAM = 0;
+    BOOL QAM = 0;UNUSED(QAM);
 	int OFDMFrame[240] = { 0 };	// accumulated samples for each carrier
 	short OFDMSamples[240];		// 216 data, 24 CP
 	int p, q;					// start at 24, copy CP later
@@ -1401,7 +1406,7 @@ PktLoopBack:		// Reenter here to send rest of variable length packet frame
 					// 16QAM
 
 					bytSym = (bytEncodedBytes[intDataPtr + i * intDataBytesPerCar] >> (4 * (1 - k))) & 15;
-					bytSymToSend = ((bytLastSym[intCarIndex] & 7) + (bytSym & 7) & 7); // Compute the differential phase to send
+                    bytSymToSend = (((bytLastSym[intCarIndex] & 7) + (bytSym & 7)) & 7); // Compute the differential phase to send
 					bytSymToSend = bytSymToSend | (bytSym & 8); // add in the amplitude bit directly from symbol 
 				}
 				p = 24;
@@ -1498,7 +1503,7 @@ PktLoopBack:		// Reenter here to send rest of variable length packet frame
 			intCarStartIndex = 4;
 			//			dblCarScalingFactor = 1.0f; // Starting at 1500 Hz  (scaling factors determined emperically to minimize crest factor)  TODO:  needs verification
 			dblCarScalingFactor = 1.2f; // Starting at 1500 Hz  Selected to give < 13% clipped values yielding a PAPR = 1.6 Constellation Quality >98
-		case 2:
+        case 2:
 			intCarStartIndex = 3;
 			//			dblCarScalingFactor = 0.53f;
 			if (strcmp(strMod, "16QAM") == 0)
