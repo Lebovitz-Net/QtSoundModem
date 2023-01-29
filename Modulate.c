@@ -5,6 +5,8 @@
 
 #define ARDOPBufferSize 12000 * 100
 
+#define UNUSED(x) (void)(x)
+
 extern unsigned short ARDOPTXBuffer[4][12000 * 100];	// Enough to hold whole frame of samples
 
 extern int ARDOPTXLen[4];				// Length of frame
@@ -12,7 +14,7 @@ extern int ARDOPTXPtr[4];				// Tx Pointer
 
 extern int intSessionBW;	// Negotiated speed
 
-#pragma warning(disable : 4244)		// Code does lots of  float to int
+// #pragma warning(disable : 4244)		// Code does lots of  float to int
 
 FILE * fp1;
 
@@ -44,6 +46,7 @@ extern int TrailerLength;
 
 void AddTrailer(int Chan)
 {
+    UNUSED(Chan);
 	int intAddedSymbols = 1 + TrailerLength / 10; // add 1 symbol + 1 per each 10 ms of MCB.Trailer
 	int i, k;
 
@@ -116,7 +119,7 @@ void GetTwoToneLeaderWithSync(int intSymLen)
 
 void SendLeaderAndSYNC(UCHAR * bytEncodedBytes, int intLeaderLen)
 {
-	int intMask = 0;
+    int intMask = 0; UNUSED(intMask);
 	int intLeaderLenMS;
 	int j, k, n;
 	UCHAR bytMask;
@@ -170,10 +173,10 @@ void Mod4FSKDataAndPlay(unsigned char * bytEncodedBytes, int Len, int intLeaderL
 
 	// Function works for 1, 2 or 4 simultaneous carriers 
 
-	int intNumCar, intBaud, intDataLen, intRSLen, intDataPtr, intSampPerSym, intDataBytesPerCar;
+    int intNumCar, intBaud, intDataLen, intRSLen, intDataPtr, intSampPerSym = 0, intDataBytesPerCar;
 	BOOL blnOdd;
 
-	int intSample;
+    int intSample = 0;
 
 	char strType[18] = "";
 	char strMod[16] = "";
@@ -181,8 +184,8 @@ void Mod4FSKDataAndPlay(unsigned char * bytEncodedBytes, int Len, int intLeaderL
 	UCHAR bytSymToSend, bytMask, bytMinQualThresh;
 
 	float dblCarScalingFactor;
-	int intMask = 0;
-	int intLeaderLenMS;
+    int intMask = 0; UNUSED(intMask);
+    int intLeaderLenMS; UNUSED(intLeaderLenMS);
 	int k, m, n;
 	UCHAR Type = bytEncodedBytes[0];
 
@@ -385,20 +388,20 @@ UCHAR GetSym8PSK(int intDataPtr, int k, int intCar, UCHAR * bytEncodedBytes, int
 
 void ModPSKDataAndPlay(unsigned char * bytEncodedBytes, int Len, int intLeaderLen, int Chan)
 {
-	int intNumCar, intBaud, intDataLen, intRSLen, intDataPtr, intSampPerSym, intDataBytesPerCar;
+    int intNumCar, intBaud, intDataLen, intRSLen, intDataPtr, intSampPerSym = 0, intDataBytesPerCar;
 	BOOL blnOdd;
 	int Type = bytEncodedBytes[0];
 
-	int intSample;
+    int intSample = 0;
 	char strType[18] = "";
 	char strMod[16] = "";
 	UCHAR bytSym, bytSymToSend, bytMinQualThresh;
-	float dblCarScalingFactor;
-	int intMask = 0;
-	int intLeaderLenMS;
+    float dblCarScalingFactor = 0.0;
+    int intMask = 0;UNUSED(intMask);
+    int intLeaderLenMS;UNUSED(intLeaderLenMS);
 	int i, j, k, l = 4, n;
-	int intCarStartIndex;
-	int intPeakAmp;
+    int intCarStartIndex = 0;
+    int intPeakAmp;UNUSED(intPeakAmp);
 	int intCarIndex;
 	BOOL QAM = 0;
 
@@ -554,7 +557,7 @@ PktLoopBack:		// Reenter here to send rest of variable length packet frame
 						// For 16QAM the angle is sent differential but the amplitude is sent as is for the symbol...verified 4/20 2018
 
 						bytSym = (bytEncodedBytes[intDataPtr + i * intDataBytesPerCar] >> (4 * (1 - k))) & 15;
-						bytSymToSend = ((bytLastSym[intCarIndex] & 7) + (bytSym & 7) & 7); // Compute the differential phase to send
+                        bytSymToSend = ((bytLastSym[intCarIndex] & 7) + ((bytSym & 7) & 7)); // Compute the differential phase to send
 						bytSymToSend = bytSymToSend | (bytSym & 8); // add in the amplitude bit directly from symbol 
 
 						// 4bits/symbol (use table symbol values 0, 1, 2, 3, -0, -1, -2, -3) and modulate amplitude with MSB
@@ -607,7 +610,7 @@ PktLoopBack:		// Reenter here to send rest of variable length packet frame
 			intCarStartIndex = 4;
 			//			dblCarScalingFactor = 1.0f; // Starting at 1500 Hz  (scaling factors determined emperically to minimize crest factor)  TODO:  needs verification
 			dblCarScalingFactor = 1.2f; // Starting at 1500 Hz  Selected to give < 13% clipped values yielding a PAPR = 1.6 Constellation Quality >98
-		case 2:
+        case 2:
 			intCarStartIndex = 3;
 			//			dblCarScalingFactor = 0.53f;
 			if (strcmp(strMod, "16QAM") == 0)
@@ -729,7 +732,7 @@ void initFilter(int Width, int Centre, int Chan)
 	SampleNo = 0;
 	Number = 0;
 	outCount = 0;
-	memset(Last120, 0, 256);
+    memset((char *)Last120, 0, sizeof(Last120));
 
 	DMABuffer = &ARDOPTXBuffer[Chan][0];
 
@@ -797,8 +800,8 @@ void initFilter(int Width, int Centre, int Chan)
 	{
 		for (i = first; i <= last; i++)
 		{
-			double x = 2 * M_PI * i / intN;
-			x = cosf(1);
+            //double x = 2 * M_PI * i / intN;
+            //x = cosf(1);
 
 			dblCoef[i] = 2.0 * dblR * cosf(2 * M_PI * i / intN); // For Frequency = bin i
 		}
@@ -1011,7 +1014,7 @@ void sendCWID(char * strID, BOOL CWOnOff, int Chan)
 		for (i = 0; i < intDotSampCnt; i++)
 			ARDOPSampleSink(intSpace[i]);
 
-	for (j = 0; j < strlen(strID); j++)
+    for (j = 0; j < (int)strlen(strID); j++)
 	{
 		index = strchr(strAlphabet, strID[j]);
 		if (index)
