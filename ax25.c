@@ -1667,21 +1667,21 @@ begin
 end;
 */
 
-int number_digi(string path)
-{
-    int n = 0;
+//int number_digi_str(string path)
+//{
+//    int n = 0;
 
-    //  a_path: array [0..ADDR_MAX_LEN-3] of string;
-    int i;
-    UNUSED(path);
-    UNUSED(i);
+//    //  a_path: array [0..ADDR_MAX_LEN-3] of string;
+//    int i;
+//    UNUSED(path);
+//    UNUSED(i);
 
-    // for i:=0 to ADDR_MAX_LEN-3 do a_path[i]:='';
-    // try explode(a_path,',',path,ADDR_MAX_LEN-2); except end;
-    // for i:=0 to ADDR_MAX_LEN-3 do if a_path[i]<>'' then inc(n);
+//    // for i:=0 to ADDR_MAX_LEN-3 do a_path[i]:='';
+//    // try explode(a_path,',',path,ADDR_MAX_LEN-2); except end;
+//    // for i:=0 to ADDR_MAX_LEN-3 do if a_path[i]<>'' then inc(n);
 
-    return n;
-}
+//    return n;
+//}
 
 
 
