@@ -542,7 +542,7 @@ void on_AGW_Gs_frame(AGWUser * AGW, struct AGWHeader * Frame, Byte * Data)
 
 			for (n = 0; n < modes_count; n++)
 			{
-				if (strcmp(modes_name[n], &Data[4]) == 0)
+                if (strcmp(modes_name[n], (const char *)&Data[4]) == 0)
 				{
 					// Found it
 
@@ -630,6 +630,8 @@ void on_AGW_C_frame(AGWUser * AGW, struct AGWHeader * Frame)
 	char * CallTo = Frame->callto;
 
 	char path[128];
+    int pathLen = 0;
+    const int pathSize = sizeof(path);
 	Byte axpath[80];
 
 	TAX25Port * AX25Sess;
@@ -645,7 +647,7 @@ void on_AGW_C_frame(AGWUser * AGW, struct AGWHeader * Frame)
 		strcpy(AX25Sess->mycall, CallFrom);
 		strcpy(AX25Sess->corrcall, CallTo);
 
-		sprintf(path, "%s,%s", CallTo, CallFrom);
+        pathLen += snprintf(path+pathLen, pathSize-pathLen, "%s,%s", CallTo, CallFrom);
 
 
 		if (Frame->DataLength)
@@ -659,8 +661,8 @@ void on_AGW_C_frame(AGWUser * AGW, struct AGWHeader * Frame)
 
 			while(nDigis--)
 			{
-				sprintf(path, "%s,%s", path, Digis);
-				Digis += 10;
+                pathLen += snprintf(path+pathLen, pathSize-pathLen, ",%s", Digis);
+                Digis += 10;
 			}
 		}
 
@@ -1057,7 +1059,7 @@ void AGW_AX25_disc(TAX25Port * AX25Sess, Byte mode)
 
 void AGW_frame_monitor(Byte snd_ch, Byte * path, string * data, Byte pid, Byte nr, Byte ns, Byte f_type, Byte f_id, Byte  rpt, Byte pf, Byte cr, Byte RX)
 {
-	char mon_frm[512];
+    char mon_frm[800];
 	char AGW_path[256];
 	string * AGW_data = NULL;
 
@@ -1214,22 +1216,22 @@ void AGW_frame_monitor(Byte snd_ch, Byte * path, string * data, Byte pid, Byte n
 	case U_UI:
 
 		frm = "UI";
-		if ((pf == SET_P))
+        if (pf == SET_P)
 			ctrl = " P/F";
 	}
 	
-	if (Digi[0])
-		sprintf(AGW_path, " %d:Fm %s To %s Via %s <%s", snd_ch + 1, CallFrom, CallTo, Digi, frm);
-	else
-		sprintf(AGW_path, " %d:Fm %s To %s <%s", snd_ch + 1, CallFrom, CallTo, frm);
-	
+    if (Digi[0])
+        snprintf(AGW_path, sizeof(AGW_path), " %d:Fm %s To %s Via %s <%s", snd_ch + 1, CallFrom, CallTo, Digi, frm);
+    else
+        snprintf(AGW_path, sizeof(AGW_path), " %d:Fm %s To %s <%s", snd_ch + 1, CallFrom, CallTo, frm);
 
-	switch (f_type)
+
+    switch (f_type)
 	{
 	case I_FRM:
 
-		//mon_frm = AGW_path + ctrl + ' R' + inttostr(nr) + ' S' + inttostr(ns) + ' pid=' + dec2hex(pid) + ' Len=' + inttostr(len) + ' >' + time_now + #13 + _data + #13#13;
-		sprintf(mon_frm, "%s%s R%d S%d pid=%X Len=%d >[%s]\r%s\r", AGW_path, ctrl, nr, ns, pid, len, ShortDateTime(), _data);
+        //mon_frm = AGW_path + ctrl + ' R' + inttostr(nr) + ' S' + inttostr(ns) + ' pid=' + dec2hex(pid) + ' Len=' + inttostr(len) + ' >' + time_now + #13 + _data + #13#13;
+        sprintf(mon_frm, "%s%s R%d S%d pid=%X Len=%d >[%s]\r%s\r", AGW_path, ctrl, nr, ns, pid, len, ShortDateTime(), _data);
 
 		break;
 
@@ -1237,21 +1239,21 @@ void AGW_frame_monitor(Byte snd_ch, Byte * path, string * data, Byte pid, Byte n
 
 		if (f_id == U_UI)
 		{
-			sprintf(mon_frm, "%s pid=%X Len=%d >[%s]\r%s\r", AGW_path, pid, len, ShortDateTime(), _data); // "= AGW_path + ctrl + '>' + time_now + #13;
+            snprintf(mon_frm, sizeof(mon_frm), "%s pid=%X Len=%d >[%s]\r%s\r", AGW_path, pid, len, ShortDateTime(), _data); // "= AGW_path + ctrl + '>' + time_now + #13;
 		}
 		else if (f_id == U_FRMR)
 		{
-			sprintf(mon_frm, "%s%s>%02x %02x %02x[%s]\r", AGW_path, ctrl, datap[0], datap[1], datap[2], ShortDateTime()); // "= AGW_path + ctrl + '>' + time_now + #13;
+            snprintf(mon_frm, sizeof(mon_frm), "%s%s>%02x %02x %02x[%s]\r", AGW_path, ctrl, datap[0], datap[1], datap[2], ShortDateTime()); // "= AGW_path + ctrl + '>' + time_now + #13;
 		}
 		else
-			sprintf(mon_frm, "%s%s>[%s]\r", AGW_path, ctrl, ShortDateTime()); // "= AGW_path + ctrl + '>' + time_now + #13;
+            snprintf(mon_frm, sizeof(mon_frm), "%s%s>[%s]\r", AGW_path, ctrl, ShortDateTime()); // "= AGW_path + ctrl + '>' + time_now + #13;
 
 		break;
 
 	case S_FRM:
 
 		//		mon_frm = AGW_path + ctrl + ' R' + inttostr(nr) + ' >' + time_now + #13;
-		sprintf(mon_frm, "%s%s R%d>[%s]\r", AGW_path, ctrl, nr, ShortDateTime()); // "= AGW_path + ctrl + '>' + time_now + #13;
+        snprintf(mon_frm, sizeof(mon_frm),"%s%s R%d>[%s]\r", AGW_path, ctrl, nr, ShortDateTime()); // "= AGW_path + ctrl + '>' + time_now + #13;
 
 		break;
 
@@ -1326,7 +1328,7 @@ void AGW_Report_Modem_Change(int port)
 
 	int i;
 	AGWUser * AGW;
-	string * pkt;
+    string * pkt; UNUSED(pkt);
 
 	// I think we send to all AGW sockets
 
