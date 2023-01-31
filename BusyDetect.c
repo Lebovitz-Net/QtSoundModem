@@ -9,7 +9,9 @@
 
 #include "ARDOPC.h"
 
+#ifndef UNUSED
 #define UNUSED(x) (void)(x)
+#endif
 
 VOID SortSignals2(float * dblMag, int intStartBin, int intStopBin, int intNumBins, float *  dblAVGSignalPerBin, float *  dblAVGBaselinePerBin);
 

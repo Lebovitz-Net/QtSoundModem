@@ -51,32 +51,46 @@ int stdinMode = 0;
 
 #define HANDLE int
 
+// ALSASound.c
+
+#ifdef __ARM_ARCH
 void gpioSetMode(unsigned gpio, unsigned mode);
 void gpioWrite(unsigned gpio, unsigned level);
-int WriteLog(char * msg, int Log);
-int _memicmp(unsigned char *a, unsigned char *b, int n);
-int stricmp(const unsigned char * pStr1, const unsigned char *pStr2);
 int gpioInitialise(void);
-HANDLE OpenCOMPort(char * pPort, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet, int Stopbits);
-int CloseSoundCard();
-int PackSamplesAndSend(short * input, int nSamples);
-void displayLevel(int max);
-BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
-VOID processargs(int argc, char * argv[]);
-void PollReceivedSamples();
+#endif
 
-
+// exported
+int stricmp(const unsigned char * pStr1, const unsigned char *pStr2);
 HANDLE OpenCOMPort(char * Port, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet, int Stopbits);
+BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
+void PollReceivedSamples();
 VOID COMSetDTR(HANDLE fd);
 VOID COMClearDTR(HANDLE fd);
 VOID COMSetRTS(HANDLE fd);
 VOID COMClearRTS(HANDLE fd);
+
+// not exported
+int CloseSoundCard();
+int PackSamplesAndSend(short * input, int nSamples);
+
+// not used QtSoundModem
+#ifdef NOTDEF
+int WriteLog(char * msg, int Log);
+int _memicmp(unsigned char *a, unsigned char *b, int n);
+void displayLevel(int max);
+VOID processargs(int argc, char * argv[]);
+int initdisplay();
+#endif
+
+// from audio.c
 
 int oss_read(short * samples, int nSamples);
 int oss_write(short * ptr, int len);
 int oss_flush();
 int oss_audio_open(char * adevice_in, char * adevice_out);
 void oss_audio_close();
+
+// from pulse.c
 
 int listpulse();
 int pulse_read(short * ptr, int len);
@@ -85,18 +99,27 @@ int pulse_flush();
 int pulse_audio_open(char * adevice_in, char * adevice_out);
 void pulse_audio_close();
 
+// not found in QtSoundModem
 
-int initdisplay();
-
+#ifdef NOTDEF
 extern BOOL blnDISCRepeating;
+#endif
+
+// ARDOPC.c
+
 extern BOOL UseKISS;			// Enable Packet (KISS) interface
 
-extern short * DMABuffer;
+// Modulate.c
 
+extern unsigned short * DMABuffer;
+
+// local to ALSASound.c
 
 BOOL UseLeft = TRUE;
 BOOL UseRight = TRUE;
 char LogDir[256] = "";
+
+// extern C method in QtSoundModem.cpp
 
 void WriteDebugLog(char * Msg);
 
@@ -1226,7 +1249,7 @@ int InitSound(BOOL Quiet)
 
 	printf("InitSound %s %s\n", CaptureDevice, PlaybackDevice);
 
-	DMABuffer = SoundInit();
+    DMABuffer = (unsigned short *)SoundInit();
 	return TRUE;
 }
 
@@ -1445,7 +1468,7 @@ void SoundFlush()
 	Number = 0;
 	
 	memset(buffer, 0, sizeof(buffer));
-	DMABuffer = &buffer[0][0];
+    DMABuffer = (unsigned short *)&buffer[0][0];
 
 #ifdef TXSILENCE
 	SendtoCard(&buffer[0][0], 1200);			// Start sending silence (attempt to fix CM delay issue)

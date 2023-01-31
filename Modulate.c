@@ -5,7 +5,9 @@
 
 #define ARDOPBufferSize 12000 * 100
 
+#ifndef UNUSED
 #define UNUSED(x) (void)(x)
+#endif
 
 extern unsigned short ARDOPTXBuffer[4][12000 * 100];	// Enough to hold whole frame of samples
 

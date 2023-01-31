@@ -9,7 +9,10 @@
 #define MEMORYARQ
 #endif
 
+#ifndef UNUSED
 #define UNUSED(x) (void)(x)
+#endif
+
 #undef PLOTWATERFALL
 
 #ifdef PLOTWATERFALL

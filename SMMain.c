@@ -50,7 +50,7 @@ extern unsigned short * DMABuffer;
 
 HANDLE OpenCOMPort(char * Port, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet, int Stopbits);
 unsigned short * SendtoCard(unsigned short * buf, int n);
-short * SoundInit();
+unsigned short * SoundInit();
 void DoTX(int Chan);
 void UDPPollReceivedSamples();
 void HAMLIBSetPTT(int PTTState);

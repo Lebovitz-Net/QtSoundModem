@@ -604,8 +604,8 @@ static int min = 0, max = 0, lastlevelGUI = 0, lastlevelreport = 0;
 static UCHAR CurrentLevel = 0;		// Peak from current samples
 
 extern "C" int SoundIsPlaying;
-extern "C" short * SendtoCard(short * buf, int n);
-extern "C" short * DMABuffer;
+extern "C" unsigned short * SendtoCard(short * buf, int n);
+extern "C" unsigned short * DMABuffer;
 
 
 extern "C" void ProcessNewSamples(short * Samples, int nSamples);
@@ -651,7 +651,7 @@ extern "C" void UDPPollReceivedSamples()
 
 		while (queue.count() > 1)
 		{
-			short * outptr = DMABuffer;
+            short * outptr = (short *)DMABuffer;
 			boolean dropPTT1 = 1;
 			boolean dropPTT2 = 1;
 
@@ -692,7 +692,7 @@ extern "C" void UDPPollReceivedSamples()
 				return;
 			}
 
-			DMABuffer = SendtoCard(DMABuffer, 1024);
+            DMABuffer = SendtoCard((short *)DMABuffer, 1024);
 
 			if (dropPTT2)				// 2nd all zeros
 				startTimer(1);	

@@ -12,7 +12,9 @@ TEMPLATE = app
 HEADERS += ./UZ7HOStuff.h \
     ./QtSoundModem.h \
     ./ARDOPC.h \
-    ./tcpCode.h
+    ./tcpCode.h \
+    alsasound.h \
+    ossaudio.h
 
 SOURCES += ./audio.c \
     ./pulse.c \
@@ -29,20 +31,22 @@ SOURCES += ./audio.c \
     ./sm_main.c \
     ./UZ7HOUtils.c \
     ./ALSASound.c \
-        ./ax25_agw.c \
-        ./berlekamp.c \
-        ./galois.c \
-        ./rs.c \
+    ./ax25_agw.c \
+    ./berlekamp.c \
+    ./galois.c \
+    ./rs.c \
     ./tcpCode.cpp \
     ./ax25_fec.c \
     ./RSUnit.c \
-	./ARDOPC.c \
+    ./ARDOPC.c \
     ./ardopSampleArrays.c \
     ./SoundInput.c \
     ./Modulate.c \
     ./ofdm.c \
     ./pktARDOP.c \
-     ./BusyDetect.c
+    ./BusyDetect.c \
+    alsasound.cpp \
+    ossaudio.cpp
 
 
 

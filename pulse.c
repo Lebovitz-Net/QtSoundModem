@@ -7,7 +7,9 @@
 #include <pulse/simple.h>
 #include <pulse/error.h>
 
+#ifndef UNUSED
 #define UNUSED(x) (void)(x)
+#endif
 
 extern char CaptureNames[16][256];
 extern char PlaybackNames[16][256];

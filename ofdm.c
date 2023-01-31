@@ -72,7 +72,10 @@ For Comparison 16QAM.2500.100
 
 #include "ARDOPC.h"
 
+#ifndef UNUSED
 #define UNUSED(x) (void)(x)
+#endif
+
 void ARDOPSampleSink(short Sample);
 
 // #pragma warning(disable : 4244)		// Code does lots of float to int
