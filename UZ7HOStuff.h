@@ -1,3 +1,6 @@
+#ifndef UZ7HOSTUFF_H
+#define UZ7HOSTUFF_H
+
 //
 //	 My port of UZ7HO's Soundmodem
 //
@@ -177,10 +180,13 @@ extern "C" {
 typedef unsigned long ULONG;
 
 #define UCHAR unsigned char
+#define USHORT unsigned short
 #define UINT unsigned int
 #define BOOL int
 #define TRUE 1
 #define FALSE 0
+#define VOID void
+#define HANDLE int
 
 // Soundcard Channels
 
@@ -423,7 +429,7 @@ typedef struct TAX25Port_t
 	word n1;
 	word n2;
 	word IPOLL_cnt;
-	TStringList frame_buf; //áóôåð êàäðîâ íà ïåðåäà÷ó
+	TStringList frame_buf; //Ã¡Ã³Ã´Ã¥Ã° ÃªÃ Ã¤Ã°Ã®Ã¢ Ã­Ã  Ã¯Ã¥Ã°Ã¥Ã¤Ã Ã·Ã³
 	TStringList I_frame_buf;
 	Byte status;
 	word clk_frack;
@@ -466,7 +472,7 @@ typedef struct TAX25Port_t
 #define STAT_TRY_UNLINK 5
 
 
-	// Ñmd,Resp,Poll,Final,Digipeater flags
+	// Ã‘md,Resp,Poll,Final,Digipeater flags
 #define 	SET_P 1
 #define 	SET_F 0
 #define 	SET_C 1
@@ -968,6 +974,8 @@ unsigned short get_fcs(UCHAR * Data, unsigned short len);
 void KISSSendtoServer(void * sock, Byte * Msg, int Len);
 int ConvFromAX25(unsigned char * incall, char * outcall);
 BOOL ConvToAX25(char * callsign, unsigned char * ax25call);
+void WriteDebugLog(char * Msg);
+int stricmp(const unsigned char * pStr1, const unsigned char *pStr2);
 void Debugprintf(const char * format, ...);
 
 double pila(double x);
@@ -1016,3 +1024,5 @@ int Add(TStringList * Q, string * Entry);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // UZ7HOSTUFF_H

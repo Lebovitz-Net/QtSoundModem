@@ -7,6 +7,7 @@
 #include <sys/ioctl.h>
 #include <stdarg.h>
 #include "UZ7HOStuff.h"
+#include "ossaudio.h"
 
 #ifdef __ARM_ARCH
 #include <stdio.h>
@@ -80,10 +81,23 @@ class ALSASound
 {
 public:
     ALSASound();
+    void printtick(char * msg);
+    void Sleep(int mS);
+    void PlatformSleep(int mS);
+    void platformInit();
+    void GetSoundDevices();
+    unsigned short * SendtoCard(unsigned short * buf, int n);
+    int InitSound(BOOL Quiet);
+    void PollReceivedSamples();
+    void CloseSound();
+    unsigned short * SoundInit();
+    void SoundFlush();
+    int stricmp(const unsigned char * pStr1, const unsigned char *pStr2);
 private:
 #ifdef NOTDEF
     extern BOOL blnDISCRepeating;
 #endif
+    OSSAudio audio;
     int SoundMode;
     int stdinMode;
     BOOL UseLeft;
@@ -171,14 +185,9 @@ private:
 
     static volatile uint32_t  *gpioReg;
 #endif
-    void Debugprintf(const char * format, ...);
-    void printtick(char * msg);
-    void Sleep(int mS);
     unsigned int getTicks();
-    void PlatformSleep(int mS);
     static void sigterm_handler(int n);
     static void sigint_handler(int n);
-    void platformInit();
     void txSleep(int mS);
     int CheckifLoaded();
     int GetOutputDeviceCollection();
@@ -190,16 +199,8 @@ private:
     int SoundCardWrite(short * input, int nSamples);
     int PackSamplesAndSend(short * input, int nSamples);
     int SoundCardRead(short * input, int nSamples);
-    unsigned short * SendtoCard(unsigned short * buf, int n);
-    void GetSoundDevices();
-    int InitSound(BOOL Quiet);
-    void PollReceivedSamples();
     void StopCapture();
     void StartCapture();
-    void CloseSound();
-    unsigned short * SoundInit();
-    void SoundFlush();
-    int stricmp(const unsigned char * pStr1, const unsigned char *pStr2);
 #ifdef TXSILENCE
     void SendSilence();
 #endif

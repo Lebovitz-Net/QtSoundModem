@@ -1,16 +1,9 @@
 #include "alsasound.h"
-
+#include "ossaudio.h"
+#include "UZ7HOStuff.h"
 
 // from audio.c
 extern "C" {
-int oss_read(short * samples, int nSamples);
-int oss_write(short * ptr, int len);
-int oss_flush();
-int oss_audio_open(char * adevice_in, char * adevice_out);
-void oss_audio_close();
-
-// from pulse.c
-
 int listpulse();
 int pulse_read(short * ptr, int len);
 int pulse_write(short * ptr, int len);
@@ -24,6 +17,7 @@ void ProcessNewSamples(unsigned short * Samples, int nSamples);
 }
 
 ALSASound::ALSASound() :
+    audio(),
     SoundMode(0),
     stdinMode (0),
     UseLeft (TRUE),
@@ -54,7 +48,6 @@ ALSASound::ALSASound() :
     m_recchannels (2),
 
     Savedplaychannels (2),
-
     SavedCaptureRate (0),
     SavedPlaybackRate (0),
 
@@ -80,18 +73,6 @@ ALSASound::ALSASound() :
 {
 
 };
-
-void ALSASound::Debugprintf(const char * format, ...)
-{
-    char Mess[10000];
-    va_list arglist;
-
-    va_start(arglist, format);
-    vsprintf(Mess, format, arglist);
-    WriteDebugLog(Mess);
-
-    return;
-}
 
 void ALSASound::Sleep(int mS)
 {
@@ -906,7 +887,7 @@ int ALSASound::SoundCardRead(short * input, int nSamples)
 
     if (SoundMode == 1)		// OSS
     {
-        ret = oss_read(samples, nSamples);
+        ret = audio.read(samples, nSamples);
     }
     else if (SoundMode == 2)// Pulse
     {
@@ -993,7 +974,7 @@ unsigned short * ALSASound::SendtoCard(unsigned short * buf, int n)
     }
 
     if (SoundMode == 1)			// OSS
-        oss_write((short *)buf, n);
+        audio.write((short *)buf, n);
     else if (SoundMode == 2)	// Pulse
         pulse_write((short *)buf, n);
     else
@@ -1052,7 +1033,7 @@ int ALSASound::InitSound(BOOL Quiet)
 
     case 1:				// OSS
 
-        if (!oss_audio_open(CaptureDevice, PlaybackDevice))
+        if (!audio.open(CaptureDevice, PlaybackDevice))
             return FALSE;
 
         break;
@@ -1188,7 +1169,7 @@ void ALSASound::CloseSound()
 
     case 1:				// OSS
 
-        oss_audio_close();
+        audio.close();
         return;
 
     case 2:				// PulseAudio
@@ -1272,7 +1253,7 @@ void ALSASound::SoundFlush()
     }
     else if (SoundMode == 1)
     {
-        oss_flush();
+        audio.flush();
     }
     else if (SoundMode == 2)
     {

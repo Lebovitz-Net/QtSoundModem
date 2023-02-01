@@ -41,6 +41,7 @@ along with QtSoundModem.  If not, see http://www.gnu.org/licenses
 
 #include "UZ7HOStuff.h"
 
+// fft_size
 
 QImage *Constellation;
 QImage *Waterfall[4] = { 0,0,0,0 };

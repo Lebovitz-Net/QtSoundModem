@@ -21,6 +21,7 @@ along with QtSoundModem.  If not, see http://www.gnu.org/licenses
 // UZ7HO Soundmodem Port by John Wiseman G8BPQ
 
 #include "UZ7HOStuff.h"
+#include <string.h>
 
 extern int blnBusyStatus;
 extern word MEMRecovery[5];
@@ -31,6 +32,17 @@ extern void updateDCD(int, int);
 extern void Frame_Optimize(TAX25Port * AX25Sess, TStringList * buf);
 extern void RX2TX(int snd_ch);
 extern void KISS_on_data_out(int port, string * frame, int TX);
+
+// Interface
+// -----------
+// Demodulator
+// make_core_BPF
+// make_core_TXBPF
+// make_core_INTR
+// make_core_LPF
+// chk_dcd
+// FIR_filter
+// detector_init
 
 /*
 
@@ -74,7 +86,7 @@ type TMChannel = record
   AFC_bit_buf1I  : array [0..1023] of single;
   AFC_bit_buf1Q  : array [0..1023] of single;
   AFC_bit_buf2   : array [0..1023] of single;
-  AFC_IIZ1       : single;
+  AFC_IIZ1 memcpy secure variant      : single;
   AFC_QQZ1       : single;
 }
 */
@@ -164,9 +176,10 @@ implementation
 uses sm_main,ax25,ax25_l2,ax25_mod,ax25_agw,rsunit,kiss_mode;
 */
 
-void detector_init()
+void detector_init() // called from sm_main and SMMain
 {
 	int i, k, j;
+    memset(DET, 0, sizeof(DET));
 
 	for (k = 0; k < 16; k++)
 	{
@@ -256,7 +269,7 @@ var
 }
 */
 
-void FIR_filter(float * src, unsigned short buf_size, unsigned short tap, float * core, float * dest, float * prev)
+void FIR_filter(float * src, unsigned short buf_size, unsigned short tap, float * core, float * dest, float * prev) // called from ax25_demod, ShowFilter, ax25_mod
 {
 	float accum = 0.0f;
 	float fp1;
@@ -302,8 +315,7 @@ cfir_k:
 
 }
 
-
-float get_persist(int snd_ch, int persist)
+float get_persist(int snd_ch, int persist) // called from demod only
 {
 	single x, x1 ;
 
@@ -315,7 +327,7 @@ float get_persist(int snd_ch, int persist)
 }
 
 
-void chk_dcd1(int snd_ch, int buf_size)
+void chk_dcd1(int snd_ch, int buf_size) // called from SMMain
 {
 	// This seems to schedule all TX, but is only called when a frame has been processed
 	//  ? does this work as Andy passes aborted frames to decoder
@@ -493,7 +505,7 @@ void chk_dcd1(int snd_ch, int buf_size)
 }
 
 
-string * get_pkt_data(string * stream)
+string * get_pkt_data(string * stream) // called from demod only
 {
 	Byte  bitstuff_cnt;
 	Byte  bits_cnt;
@@ -542,7 +554,7 @@ string * get_pkt_data(string * stream)
 	return s;
 }
 
-string * get_pkt_data2(string * stream, Byte last_nrzi_bit)
+string * get_pkt_data2(string * stream, Byte last_nrzi_bit)  // called from demod only
 {
 	Byte  bitstuff_cnt;
 	Byte  bits_cnt;
@@ -596,7 +608,7 @@ string * get_pkt_data2(string * stream, Byte last_nrzi_bit)
 	return s;
 }
 
-string * get_NRZI_data(string * stream, UCHAR last_nrzi_bit)
+string * get_NRZI_data(string * stream, UCHAR last_nrzi_bit)  // called from demod only
 {
 	longword len;
 	word i;
@@ -656,7 +668,7 @@ var
 }
 */
 
-void make_rx_frame(int snd_ch, int rcvr_nr, int emph, Byte last_nrzi_bit, string * raw_data, string * raw_data1)
+void make_rx_frame(int snd_ch, int rcvr_nr, int emph, Byte last_nrzi_bit, string * raw_data, string * raw_data1)  // called from demod only
 {
 	int swap_i, swap_k;
 	string * data;
@@ -842,7 +854,7 @@ void make_rx_frame(int snd_ch, int rcvr_nr, int emph, Byte last_nrzi_bit, string
 int lastcrc = 0;
 
 
-void make_rx_frame_PSK(int snd_ch, int rcvr_nr, int emph, string * data)
+void make_rx_frame_PSK(int snd_ch, int rcvr_nr, int emph, string * data)  // called from demod only
 {
 	word len, crc1, crc2;
 
@@ -954,7 +966,7 @@ procedure add_to_ARQ_FEC(buf: TStringList; data: string);
 }
 */
 
-void make_rx_frame_FEC(int snd_ch, int rcvr_nr, string * data, string * fec_data, word nErr)
+void make_rx_frame_FEC(int snd_ch, int rcvr_nr, string * data, string * fec_data, word nErr)  // called from demod only
 {
     UNUSED(snd_ch);
     UNUSED(rcvr_nr);
@@ -1220,7 +1232,7 @@ void  Mux3(int snd_ch, int rcvr_nr, int emph, float * src1, float * core, float 
 
 
 
-void Mux3_PSK(int snd_ch, int rcvr_nr, int emph, float * src1, float * core, float *destI, float *destQ, float * prevI, float * prevQ, int tap, int buf_size)
+void Mux3_PSK(int snd_ch, int rcvr_nr, int emph, float * src1, float * core, float *destI, float *destQ, float * prevI, float * prevQ, int tap, int buf_size)  // called from demod only
 {
 	float pi2 = 2 * pi;
 
@@ -1348,7 +1360,7 @@ int stats[2] = { 0 };
 
 #define dcd_corr 0.11111f
 
-void decode_stream_MPSK(int snd_ch, int rcvr_nr, float *  src, int buf_size, int  last)
+void decode_stream_MPSK(int snd_ch, int rcvr_nr, float *  src, int buf_size, int  last)  // called from demod only
 {
 
 #ifndef WIN32
@@ -1996,7 +2008,7 @@ void decode_stream_MPSK(int snd_ch, int rcvr_nr, float *  src, int buf_size, int
 
 #endif
 
-void  make_rx_frame_FX25(int snd_ch, int rcvr_nr, int emph, string * data)
+void  make_rx_frame_FX25(int snd_ch, int rcvr_nr, int emph, string * data)  // called from demod only
 {
 	struct TDetector_t * pDET = &DET[emph][rcvr_nr];
 
@@ -2060,7 +2072,7 @@ void  make_rx_frame_FX25(int snd_ch, int rcvr_nr, int emph, string * data)
 
 int fx25_decode_rs(Byte * data, int * eras_pos, int no_eras, int pad, int rs_size);
 
-string * decode_FX25_data(TFX25 fx25)
+string * decode_FX25_data(TFX25 fx25)  // called from demod only
 {
 	integer eras_pos = 0, i, j, len, rs_res;
 	Byte a, k;
@@ -2229,7 +2241,7 @@ unsigned char get_corr(unsigned long long val)
 
 
 
-void decode_stream_FSK(int last, int snd_ch, int rcvr_nr, int emph, float * src_buf, float * bit_buf, int  buf_size, string * data)
+void decode_stream_FSK(int last, int snd_ch, int rcvr_nr, int emph, float * src_buf, float * bit_buf, int  buf_size, string * data)  // called from demod only
 {
     UNUSED(data);
     int i, k, j, n;
@@ -2657,7 +2669,7 @@ void decode_stream_FSK(int last, int snd_ch, int rcvr_nr, int emph, float * src_
 }
 
 
-void decode_stream_BPSK(int last, int snd_ch, int rcvr_nr, int emph, float * srcI, float * srcQ, float * bit_buf, int  buf_size, string * data)
+void decode_stream_BPSK(int last, int snd_ch, int rcvr_nr, int emph, float * srcI, float * srcQ, float * bit_buf, int  buf_size, string * data)  // called from demod only
 {
 	float agc_fast = 0.01f;
 	float agc_fast1 = 1 - agc_fast;
@@ -2935,7 +2947,7 @@ void decode_stream_BPSK(int last, int snd_ch, int rcvr_nr, int emph, float * src
 }
 
 
-void decode_stream_QPSK(int last, int snd_ch, int rcvr_nr, int emph, float * srcI, float * srcQ, float * bit_buf, int  buf_size, string * data)
+void decode_stream_QPSK(int last, int snd_ch, int rcvr_nr, int emph, float * srcI, float * srcQ, float * bit_buf, int  buf_size, string * data)  // called from demod only
 {
 	float agc_fast = 0.01f;
 	float agc_fast1 = 1 - agc_fast;
@@ -3288,7 +3300,7 @@ void decode_stream_QPSK(int last, int snd_ch, int rcvr_nr, int emph, float * src
 	pDET->AngleCorr[snd_ch] = AngleCorr;
 }
 
-void decode_stream_8PSK(int last, int snd_ch, int rcvr_nr, int emph, float * srcI, float * srcQ, float * bit_buf, int  buf_size, string * data)
+void decode_stream_8PSK(int last, int snd_ch, int rcvr_nr, int emph, float * srcI, float * srcQ, float * bit_buf, int  buf_size, string * data)  // called from demod only
 {
 	float agc_fast = 0.01f;
 	float agc_fast1 = 1 - agc_fast;
@@ -3627,7 +3639,7 @@ var
 */
 
 
-void init_BPF(float freq1, float freq2, unsigned short tap, float samplerate, float * buf)
+void init_BPF(float freq1, float freq2, unsigned short tap, float samplerate, float * buf)  // called from demod only
 {
 	unsigned short tap1, i;
 	float tap12, ham, acc1, acc2;
@@ -3689,7 +3701,7 @@ void init_BPF(float freq1, float freq2, unsigned short tap, float samplerate, fl
 
 
 
-void  init_LPF(float width, unsigned short tap, float samplerate, float * buf)
+void  init_LPF(float width, unsigned short tap, float samplerate, float * buf)  // called from demod only
 {
 	float acc1, ham;
 	unsigned short tap1, i;
@@ -3728,7 +3740,8 @@ void  init_LPF(float width, unsigned short tap, float samplerate, float * buf)
 		buf[i] = buf[i] / acc1;
 }
 
-void make_core_INTR(UCHAR snd_ch)
+
+void make_core_INTR(UCHAR snd_ch) // called from sm_main
 {
 	float width;
 
@@ -3837,8 +3850,7 @@ void  make_core_LPF(UCHAR snd_ch, short width)
 		init_LPF(width, LPF_tap[snd_ch], RX_Samplerate, LPF_core[snd_ch]);
 }
 
-
-void  make_core_BPF(UCHAR snd_ch, short freq, short width)
+void  make_core_BPF(UCHAR snd_ch, short freq, short width) // called from sm_main, SMMain
 {
 	float old_freq, width2, rx_samplerate2, freq1, freq2;
 
@@ -3881,7 +3893,7 @@ void  make_core_BPF(UCHAR snd_ch, short freq, short width)
 
 
 
-void make_core_TXBPF(UCHAR snd_ch, float freq, float width)
+void make_core_TXBPF(UCHAR snd_ch, float freq, float width) // called from sm_main, SMMain
 {
 	float freq1, freq2;
 
@@ -3906,7 +3918,7 @@ void make_core_TXBPF(UCHAR snd_ch, float freq, float width)
 
 
 
-void interpolation(int snd_ch, int rcvr_nr, int emph, float * dest_buf, float * src_buf, int buf_size)
+void interpolation(int snd_ch, int rcvr_nr, int emph, float * dest_buf, float * src_buf, int buf_size)  // called from demod only
 {
 	int n_intr1, buf_size1, k, i, j;
 	float buf[8192];
@@ -3926,7 +3938,7 @@ void interpolation(int snd_ch, int rcvr_nr, int emph, float * dest_buf, float * 
 	FIR_filter(buf, buf_size *n_INTR[snd_ch], INTR_tap[snd_ch], INTR_core[snd_ch], dest_buf, DET[emph][rcvr_nr].prev_INTR_buf[snd_ch]);
 }
 
-void interpolation_PSK(int snd_ch, int rcvr_nr, int emph, float * destI, float * destQ, float * srcI, float * srcQ, int buf_size)
+void interpolation_PSK(int snd_ch, int rcvr_nr, int emph, float * destI, float * destQ, float * srcI, float * srcQ, int buf_size)  // called from demod only
 {
 	word n_intr1, buf_size1, k, i, j;
 	single bufI[8192], bufQ[8192];
@@ -3951,7 +3963,7 @@ void interpolation_PSK(int snd_ch, int rcvr_nr, int emph, float * destI, float *
 }
 
 
-void FSK_Demodulator(int snd_ch, int rcvr_nr, int emph, int last)
+void FSK_Demodulator(int snd_ch, int rcvr_nr, int emph, int last)  // called from demod only
 {
 	// filtered samples in src_BPF_buf, output in src_Loop_buf
 
@@ -3967,7 +3979,7 @@ void FSK_Demodulator(int snd_ch, int rcvr_nr, int emph, int last)
 	  decode_stream_FSK(last,snd_ch,rcvr_nr,emph,DET[emph][rcvr_nr].src_Loop_buf[snd_ch], &DET[emph][rcvr_nr].bit_buf[snd_ch][0], rx_bufsize, &DET[emph][rcvr_nr].rx_data[snd_ch]);
 }
 
-void  BPSK_Demodulator(int snd_ch, int rcvr_nr, int emph, int last)
+void  BPSK_Demodulator(int snd_ch, int rcvr_nr, int emph, int last)  // called from demod only
 {
 	Mux3_PSK(snd_ch, rcvr_nr, emph,
 		DET[0][rcvr_nr].src_BPF_buf[snd_ch],
@@ -4042,7 +4054,7 @@ void  QPSK_Demodulator(int snd_ch, int rcvr_nr, int emph, int last)
 
 
 
-void PSK8_Demodulator(int snd_ch, int rcvr_nr, int emph, boolean last)
+void PSK8_Demodulator(int snd_ch, int rcvr_nr, int emph, boolean last)  // called from demod only
 {
 	Mux3_PSK(snd_ch, rcvr_nr, emph,
 		DET[0][rcvr_nr].src_BPF_buf[snd_ch],
@@ -4081,7 +4093,8 @@ void PSK8_Demodulator(int snd_ch, int rcvr_nr, int emph, boolean last)
 extern void analiz_frame(int snd_ch, string * frame, char * code, boolean fecflag);
 extern void CreateStringList(TStringList * List);
 
-void Demodulator(int snd_ch, int rcvr_nr, float * src_buf, int last, int xcenter)
+
+void Demodulator(int snd_ch, int rcvr_nr, float * src_buf, int last, int xcenter) // called from sm_main
 {
     UNUSED(xcenter);
 	// called once per decoder (current one in rcvr_nr)
@@ -4274,7 +4287,7 @@ void Demodulator(int snd_ch, int rcvr_nr, float * src_buf, int last, int xcenter
 	}
 }
 
-string * memory_ARQ(TStringList * buf, string * data)
+string * memory_ARQ(TStringList * buf, string * data)  // called from demod only
 {
 	unsigned char crc[32];
 	string * s;

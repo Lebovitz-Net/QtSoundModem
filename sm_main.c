@@ -296,6 +296,11 @@ UCHAR tx_buf_num [5] = {0,0,0,0};
 
 extern short active_rx_freq[5];
 
+// interfaces
+// set_speed
+// init_speed
+// frame_monitor
+// BufferFull
 
 
 int speed[5] = {0,0,0,0};
@@ -1442,7 +1447,7 @@ Begin
       OpenResult  =  WaveOutPrepareHeader(WaveOuthandle[snd_ch], @TX_header[snd_ch][Loop], sizeof(TWaveHdr));
       if OpenResult = MMSYSERR_NOERROR then
       begin
-        // Заполнить буфер на передачу
+        // Г‡Г ГЇГ®Г«Г­ГЁГІГј ГЎГіГґГҐГ° Г­Г  ГЇГҐГ°ГҐГ¤Г Г·Гі
         if buf_status[snd_ch] = BUF_FULL then
         begin
           make_wave_buf(snd_ch,TX_pbuf[snd_ch][Loop]);
@@ -1681,8 +1686,8 @@ uintptr_t _beginthread(void(__cdecl *start_address)(void *), unsigned stack_size
 
 pthread_t _beginthread(void(*start_address)(void *), unsigned stack_size, void * arglist)
 {
-	pthread_t thread;
     UNUSED(stack_size);
+	pthread_t thread;
 
     if (pthread_create(&thread, NULL, (void * (*)(void *))&start_address, (void*)arglist) != 0)
 		perror("New Thread");
@@ -2050,7 +2055,7 @@ char * frame_monitor(string * frame, char * code, int tx_stat)
 	string * data = newString();
 
 	if (code[0] && strlen(code) < 14)
-		sprintf(codestr, "[%s]", code);
+        snprintf(codestr, sizeof(codestr), "[%s]", code);
 
 	if (tx_stat)
 		TR = 'T';
@@ -2372,7 +2377,7 @@ end;
 procedure TForm1.FormCreate(Sender TObject);
 begin
   if hPrevInst <> 0 then begin
-    MessageDlg("Программа уже запущена!", mtError, [mbOk], 0);
+    MessageDlg("ГЏГ°Г®ГЈГ°Г Г¬Г¬Г  ГіГ¦ГҐ Г§Г ГЇГіГ№ГҐГ­Г !", mtError, [mbOk], 0);
     Application.Terminate;
   end;
   RS = TReedSolomon.Create(Self);

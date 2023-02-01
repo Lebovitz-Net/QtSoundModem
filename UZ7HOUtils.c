@@ -20,6 +20,7 @@ along with QtSoundModem.  If not, see http://www.gnu.org/licenses
 
 // UZ7HO Soundmodem Port by John Wiseman G8BPQ
 #include "UZ7HOStuff.h"
+#include <stdarg.h>
 
 // TStringlist And String emulation Functions
 
@@ -39,6 +40,46 @@ int Count(TStringList * List)
 {
 	return List->Count;
 }
+
+void Debugprintf(const char * format, ...)
+
+{
+    char Mess[10000];
+    va_list arglist;
+
+    va_start(arglist, format);
+    vsprintf(Mess, format, arglist);
+    WriteDebugLog(Mess);
+
+    return;
+}
+
+int stricmp(const unsigned char * pStr1, const unsigned char *pStr2)
+{
+    unsigned char c1, c2;
+    int  v;
+
+    if (pStr1 == NULL)
+    {
+        if (pStr2)
+            Debugprintf("stricmp called with NULL 1st param - 2nd %s ", pStr2);
+        else
+            Debugprintf("stricmp called with two NULL params");
+
+        return 1;
+    }
+
+
+    do {
+        c1 = *pStr1++;
+        c2 = *pStr2++;
+        /* The casts are necessary when pStr1 is shorter & char is signed */
+        v = tolower(c1) - tolower(c2);
+    } while ((v == 0) && (c1 != '\0') && (c2 != '\0') );
+
+    return v;
+}
+
 
 string * newString()
 {

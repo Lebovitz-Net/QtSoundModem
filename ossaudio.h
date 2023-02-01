@@ -1,5 +1,6 @@
 #ifndef OSSAUDIO_H
 #define OSSAUDIO_H
+//#include <fcntl.h>
 
 // Originally 40.  Version 1.2, try 10 for lower latency.
 
@@ -10,6 +11,12 @@ class OSSAudio
 {
 public:
     OSSAudio();
+    int open(char * adevice_in, char * adevice_out);
+    int setParams(int fd);
+    int read(short * samples, int nSamples);
+    int write(short * ptr, int len);
+    void flush();
+    void close(void);
 private:
     int oss_fd;	/* Single device, both directions. */
     int insize;
@@ -18,12 +25,6 @@ private:
     int samples_per_sec;	/* Audio sampling rate.  Typically 11025, 22050, or 44100. */
     int bits_per_sample;	/* 8 (unsigned char) or 16 (signed short). */
     int calcbufsize(int rate, int chans, int bits);
-    int oss_audio_open(char * adevice_in, char * adevice_out);
-    int set_oss_params(int fd);
-    int oss_read(short * samples, int nSamples);
-    int oss_write(short * ptr, int len);
-    void oss_flush();
-    void oss_audio_close(void);
 };
 
 #endif // OSSAUDIO_H

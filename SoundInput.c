@@ -35,10 +35,12 @@ extern unsigned int PKTLEDTimer;
 //#define max(x, y) ((x) > (y) ? (x) : (y))
 //#define min(x, y) ((x) < (y) ? (x) : (y))
 
-void SendFrametoHost(unsigned char *data, unsigned dlen);
+// void SendFrametoHost(unsigned char *data, unsigned dlen);
 
 void CheckandAdjustRXLevel(int maxlevel, int minlevel, BOOL Force);
+#ifdef PLOTCONSTELLATION
 void mySetPixel(unsigned char x, unsigned char y, unsigned int Colour);
+#endif
 void clearDisplay();
 void updateDisplay();
 VOID L2Routine(UCHAR * Packet, int Length, int FrameQuality, int totalRSErrors, int NumCar, int pktRXMode);
@@ -341,7 +343,7 @@ BOOL DemodOFDM();
 BOOL Decode4FSKOFDMACK();
 
 
-void PrintCarrierFlags()
+void PrintCarrierFlags() // called from here only
 {
 	char Msg[128];
 
@@ -368,7 +370,7 @@ void PrintCarrierFlags()
 
 // Function to determine if frame type is short control frame
   
-BOOL IsShortControlFrame(UCHAR bytType)
+BOOL IsShortControlFrame(UCHAR bytType) // called from here only
 {
     UNUSED(bytType);
     switch (intFrameType)
@@ -391,7 +393,7 @@ BOOL IsShortControlFrame(UCHAR bytType)
 	return FALSE;
 }
 
-BOOL IsConReqFrame(UCHAR bytType)
+BOOL IsConReqFrame(UCHAR bytType) // called from here only
 {
 	switch (bytType)
 	{
@@ -410,7 +412,7 @@ BOOL IsConReqFrame(UCHAR bytType)
 
 //	 Function to determine if it is a data frame (Even OR Odd) 
 
-BOOL IsDataFrame(UCHAR intFrameType)
+BOOL IsDataFrame(UCHAR intFrameType) // called from here only
 {
 	const char * String = Name(intFrameType);
 
@@ -428,7 +430,7 @@ BOOL IsDataFrame(UCHAR intFrameType)
 
 //    Subroutine to clear all mixed samples 
 
-void ClearAllMixedSamples()
+void ClearAllMixedSamples()  // called from ofdm
 {
 	intFilteredMixedSamplesLength = 0;
 	intMFSReadPtr = 0;
@@ -437,7 +439,7 @@ void ClearAllMixedSamples()
 
 //  Subroutine to Initialize mixed samples
 
-void InitializeMixedSamples()
+void InitializeMixedSamples()  // called from here only
 {
 	// Measure the time from release of PTT to leader detection of reply.
 
@@ -449,7 +451,7 @@ void InitializeMixedSamples()
 
 //	Subroutine to discard all sampled prior to current intRcvdSamplesRPtr
 
-void DiscardOldSamples()
+void DiscardOldSamples()  // called from ofdm
 {
 	// This restructures the intRcvdSamples array discarding all samples prior to intRcvdSamplesRPtr
  
@@ -482,7 +484,7 @@ float xdblR = 0.9995f;			// insures stability (must be < 1.0) (Value .9995 7/8/2
 int xintN = 120;				//Length of filter 12000/100
 
 
-void FSMixFilter2500Hz(short * intMixedSamples, int intMixedSamplesLength)
+void FSMixFilter2500Hz(short * intMixedSamples, int intMixedSamplesLength) // called from here only
 {
 	// assumes sample rate of 12000
 	// implements  27 100 Hz wide sections   (~2500 Hz wide @ - 30dB centered on 1500 Hz)
@@ -571,7 +573,7 @@ void FSMixFilter2500Hz(short * intMixedSamples, int intMixedSamplesLength)
 
 //	Function to apply 150Hz filter used in Envelope correlator
 
-void Filter150Hz(short * intFilterOut)
+void Filter150Hz(short * intFilterOut) // called from here only
 {
 	// assumes sample rate of 12000
 	// implements  3 100 Hz wide sections   (~150 Hz wide @ - 30dB centered on 1500 Hz)
@@ -648,7 +650,7 @@ void Filter150Hz(short * intFilterOut)
 
 //	Function to apply 75Hz filter used in Envelope correlator
 
-void Filter75Hz(short * intFilterOut, BOOL blnInitialise, int intSamplesToFilter)
+void Filter75Hz(short * intFilterOut, BOOL blnInitialise, int intSamplesToFilter) // called from here only
 {
     UNUSED(blnInitialise);
 	// assumes sample rate of 12000
@@ -724,7 +726,7 @@ void Filter75Hz(short * intFilterOut, BOOL blnInitialise, int intSamplesToFilter
 
 // Subroutine to Mix new samples with NCO to tune to nominal 1500 Hz center with reversed sideband and filter. 
 
-void MixNCOFilter(short * intNewSamples, int Length, float dblOffsetHz)
+void MixNCOFilter(short * intNewSamples, int Length, float dblOffsetHz) // called from here only
 {
 	// Correct the dimension of intPriorMixedSamples if needed (should only happen after a bandwidth setting change). 
 
@@ -766,7 +768,7 @@ void MixNCOFilter(short * intNewSamples, int Length, float dblOffsetHz)
 
 //	Function to Correct Raw demodulated data with Reed Solomon FEC 
 
-int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDataLen, int intRSLen, int bytFrameType, int Carrier)
+int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDataLen, int intRSLen, int bytFrameType, int Carrier) // called from ofdm
 {
 	BOOL blnRSOK;
 	BOOL FrameOK;
@@ -872,7 +874,7 @@ float dblFreqBin[MAXCAR];
 
 BOOL CheckFrameTypeParity(int intTonePtr, int * intToneMags);
 
-void ARDOPProcessNewSamples(short * Samples, int nSamples)
+void ARDOPProcessNewSamples(short * Samples, int nSamples) // called from sm_main only
 {
 	BOOL blnFrameDecodedOK = FALSE;
 
@@ -1349,7 +1351,7 @@ ProcessFrame:
 }
 // Subroutine to compute Goertzel algorithm and return Real and Imag components for a single frequency bin
 
-void GoertzelRealImag(short intRealIn[], int intPtr, int N, float m, float * dblReal, float * dblImag)
+void GoertzelRealImag(short intRealIn[], int intPtr, int N, float m, float * dblReal, float * dblImag) // called from ofdm
 {
 	// intRealIn is a buffer at least intPtr + N in length
 	// N need not be a power of 2
@@ -1397,7 +1399,7 @@ float dblHannAng;
 
 // Subroutine to compute Goertzel algorithm and return Real and Imag components for a single frequency bin with a Hann Window function for N a multiple of 120
 
-void GoertzelRealImagHann120(short intRealIn[], int intPtr, int N, float m, float * dblReal, float * dblImag)
+void GoertzelRealImagHann120(short intRealIn[], int intPtr, int N, float m, float * dblReal, float * dblImag) // called from here only
 {
     // This version precomputes the raised cosine (Hann or Hanning) window and uses it for any length that is a multiple of 120 samples
 	// intRealIn is a buffer at least intPtr + N in length
@@ -1454,7 +1456,7 @@ void GoertzelRealImagHann120(short intRealIn[], int intPtr, int N, float m, floa
 
 
 
-void GoertzelRealImagHann960(short intRealIn[], int intPtr, int N, float m, float * dblReal, float * dblImag)
+void GoertzelRealImagHann960(short intRealIn[], int intPtr, int N, float m, float * dblReal, float * dblImag) // called from here only
 {
     // This version precomputes the raised cosine (Hann or Hanning) window and uses it for any length that is a multiple of 120 samples
 	// intRealIn is a buffer at least intPtr + N in length
@@ -1510,7 +1512,7 @@ void GoertzelRealImagHann960(short intRealIn[], int intPtr, int N, float m, floa
 
 
 
-void GoertzelRealImagHanning(short intRealIn[], int intPtr, int N, float m, float * dblReal, float * dblImag)
+void GoertzelRealImagHanning(short intRealIn[], int intPtr, int N, float m, float * dblReal, float * dblImag) // called from here only
 {
 	// intRealIn is a buffer at least intPtr + N in length
 	// N need not be a power of 2
@@ -1561,7 +1563,7 @@ float dblHamWin[1200];
 float dblHamAng;
 int HamWinLen = 0;
 
-void GoertzelRealImagHamming(short intRealIn[], int intPtr, int N, float m, float * dblReal, float * dblImag)
+void GoertzelRealImagHamming(short intRealIn[], int intPtr, int N, float m, float * dblReal, float * dblImag) // called from here only
 {
 	// intRealIn is a buffer at least intPtr + N in length
 	// N need not be a power of 2
@@ -1639,7 +1641,7 @@ float QuinnSpectralPeakLocator(float XkM1Re, float XkM1Im, float XkRe, float XkI
 
 // Function to interpolate spectrum peak using simple interpolation 
 
-float SpectralPeakLocator(float XkM1Re, float XkM1Im, float XkRe, float XkIm, float XkP1Re, float XkP1Im, float * dblCentMag, char * Win)
+float SpectralPeakLocator(float XkM1Re, float XkM1Im, float XkRe, float XkIm, float XkP1Re, float XkP1Im, float * dblCentMag, char * Win) // called from here only
 {
 	// Use this for Windowed samples instead of QuinnSpectralPeakLocator
 
@@ -1668,7 +1670,7 @@ float SpectralPeakLocator(float XkM1Re, float XkM1Im, float XkRe, float XkIm, fl
 float dblPriorFineOffset = 1000.0f;
 
 
-BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetHz, int * intSN)
+BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetHz, int * intSN) // called from here only
 {
 	// This version uses 10Hz bin spacing. Hamming window on Goertzel, and simple spectral peak interpolator
 	// It requires about 50% more CPU time when running but produces more sensive leader detection and more accurate tuning
@@ -1942,7 +1944,7 @@ BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetH
 
 
 
-BOOL SearchFor2ToneLeader4(short * intNewSamples, int Length, float * dblOffsetHz, int * intSN)
+BOOL SearchFor2ToneLeader4(short * intNewSamples, int Length, float * dblOffsetHz, int * intSN) // search from here onlyl
 {
     // This version uses 12.5 Hz bin spacing. Blackman window on Goertzel, and simple spectral peak interpolator optimized for Blackman
     // Blackman selected for maximum rejection (about 60 dB) of the other two-tone bin 50 Hz (4 x 12.5 Hz bins) away. 
@@ -2112,7 +2114,7 @@ BOOL SearchFor2ToneLeader4(short * intNewSamples, int Length, float * dblOffsetH
 
 //	Function to look at the 2 tone leader and establishes the Symbol framing using envelope search and minimal phase error. 
 
-BOOL Acquire2ToneLeaderSymbolFraming()
+BOOL Acquire2ToneLeaderSymbolFraming() // called from here only
 {
 	float dblCarPh;
 	float dblReal, dblImag;
@@ -2170,7 +2172,7 @@ BOOL Acquire2ToneLeaderSymbolFraming()
 }
 
 // Function to establish symbol sync 
-int EnvelopeCorrelator()
+int EnvelopeCorrelator() // called from here only
 {
 	// Compute the two symbol correlation with the Two tone leader template.
 	// slide the correlation one sample and repeat up to 240 steps 
@@ -2224,7 +2226,7 @@ int EnvelopeCorrelator()
 }
  
 
-int EnvelopeCorrelatorNew()
+int EnvelopeCorrelatorNew() // called from here only
 {
 	// Compute the two symbol correlation with the Two tone leader template.
 	// slide the correlation one sample and repeat up to 240 steps 
@@ -2282,7 +2284,7 @@ int EnvelopeCorrelatorNew()
 
 //	Function to acquire the Frame Sync for all Frames 
 
-BOOL AcquireFrameSyncRSB()
+BOOL AcquireFrameSyncRSB() // called from here only
 {
 	// Two improvements could be incorporated into this function:
 	//    1) Provide symbol tracking until the frame sync is found (small corrections should be less than 1 sample per 4 symbols ~2000 ppm)
@@ -2363,7 +2365,7 @@ BOOL AcquireFrameSyncRSB()
 
 
 // Function to acquire the Frame Sync for all Frames using exponential averaging 
-int AcquireFrameSyncRSBAvg()
+int AcquireFrameSyncRSBAvg() // called from here only
 {
 	//	This new routine uses exponential averaging on the ptr reference leader phases to minimize noise contribution
 	//	Needs optimization of filter values and decision thresholds with actual simulator at low S:N and multipath. 
@@ -2468,7 +2470,7 @@ int AcquireFrameSyncRSBAvg()
 }
 //	 Function to Demod FrameType4FSK
 
-BOOL DemodFrameType4FSK(int intPtr, short * intSamples, int * intToneMags)
+BOOL DemodFrameType4FSK(int intPtr, short * intSamples, int * intToneMags) // called from here only
 {
 	float dblReal, dblImag;
 	int i;
@@ -2496,7 +2498,7 @@ BOOL DemodFrameType4FSK(int intPtr, short * intSamples, int * intToneMags)
 
 // Function to compute the "distance" from a specific bytFrame Xored by bytID using 1 symbol parity 
 
-float ComputeDecodeDistance(int intTonePtr, int * intToneMags, UCHAR bytFrameType, UCHAR bytID)
+float ComputeDecodeDistance(int intTonePtr, int * intToneMags, UCHAR bytFrameType, UCHAR bytID) // called from here only
 {
 	// intTonePtr is the offset into the Frame type symbols. 0 for first Frame byte 16 = (4 x 4) for second frame byte 
 
@@ -2530,7 +2532,7 @@ float ComputeDecodeDistance(int intTonePtr, int * intToneMags, UCHAR bytFrameTyp
 
 //	A function to check the parity symbol used in the frame type decoding
 
-BOOL CheckTypeParity(UCHAR bytFrameType)
+BOOL CheckTypeParity(UCHAR bytFrameType) // called from here only
 {
 	// Returns True if Parity OK
 
@@ -2552,7 +2554,7 @@ BOOL CheckTypeParity(UCHAR bytFrameType)
 
 // Function to check Parity of frame type bytes
 
-UCHAR GetFrameTypeByte(int intTonePtr, int * intToneMags)
+UCHAR GetFrameTypeByte(int intTonePtr, int * intToneMags) // called from here only
 {
 	// Demodulate the byte pointed to postion of tone PTR and return it
 	 
@@ -2584,7 +2586,7 @@ UCHAR GetFrameTypeByte(int intTonePtr, int * intToneMags)
 } 
 
 
-BOOL CheckFrameTypeParity(int intTonePtr, int * intToneMags)
+BOOL CheckFrameTypeParity(int intTonePtr, int * intToneMags) // called from here onlly
 {
 	// Demodulate the byte pointed to postion of tone PTR and check Parity Return True if OK
 
@@ -2702,7 +2704,7 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 
 //	Function to acquire the 4FSK frame type
 
-int Acquire4FSKFrameType()
+int Acquire4FSKFrameType() // called from here only
 {
 	// intMFSReadPtr is pointing to start of first symbol of Frame Type (total of 8 4FSK symbols in frame type (2 bytes) + 1 parity symbol per byte 
 	// returns -1 if minimal distance decoding is below threshold (low likelyhood of being correct)
@@ -2764,7 +2766,7 @@ int Acquire4FSKFrameType()
 //	Is called repeatedly to decode multitone modes
 int Corrections = 0;
 
-BOOL Demod1Car4FSK()
+BOOL Demod1Car4FSK() // called from here only
 {
 	int Start = 0;
 	
@@ -2878,7 +2880,7 @@ BOOL Demod1Car4FSK()
 
 // Function to demodulate one carrier for all low baud rate 4FSK frame types
  
-void Demod1Car4FSKChar(int Start, UCHAR * Decoded, int Carrier)
+void Demod1Car4FSKChar(int Start, UCHAR * Decoded, int Carrier) // called from here only
 {
 	// Converts intSamples to an array of bytes demodulating the 4FSK symbols with center freq intCenterFreq
 	// intPtr should be pointing to the approximate start of the first data symbol  
@@ -2994,7 +2996,7 @@ extern int intBW;
 //  Function to Demodulate Frame based on frame type
 //	Will be called repeatedly as new samples arrive
 
-void DemodulateFrame(int intFrameType)
+void DemodulateFrame(int intFrameType) // called from here onlyl
 {
  //       Dim stcStatus As Status = Nothing
 
@@ -3083,7 +3085,7 @@ void DemodulateFrame(int intFrameType)
 int intSNdB = 0, intQuality = 0;
 
 
-BOOL DecodeFrame(int xxx, UCHAR * bytData)
+BOOL DecodeFrame(int xxx, UCHAR * bytData) // called from ax25, ARPOPC
 {
     UNUSED(bytData); UNUSED(xxx);
     BOOL blnDecodeOK = FALSE;
@@ -3269,7 +3271,7 @@ returnframe:
 void drawFastVLine(int x0, int y0, int length, int color);
 void drawFastHLine(int x0, int y0, int length, int color);
 
-void Update4FSKConstellation(int * intToneMags, int * intQuality)
+void Update4FSKConstellation(int * intToneMags, int * intQuality) // called from here only
 {
 	// Subroutine to update bmpConstellation plot for 4FSK modes...
         
@@ -3372,7 +3374,7 @@ void Update4FSKConstellation(int * intToneMags, int * intQuality)
 
 // Subroutine to update the 16FSK constallation
 
-void Update16FSKConstellation(int * intToneMags, int * intQuality)
+void Update16FSKConstellation(int * intToneMags, int * intQuality) // called from here only
 {
 	//	Subroutine to update bmpConstellation plot for 16FSK modes...
 
@@ -3528,7 +3530,7 @@ void Update8FSKConstellation(int * intToneMags, int * intQuality)
 
 //	Subroutine to Update the PhaseConstellation
 
-int UpdatePhaseConstellation(short * intPhases, short * intMag, int intPSKPhase, BOOL blnQAM, BOOL OFDM)
+int UpdatePhaseConstellation(short * intPhases, short * intMag, int intPSKPhase, BOOL blnQAM, BOOL OFDM) // called from ofdm, ARDOPC
 {
 	// Subroutine to update bmpConstellation plot for PSK modes...
 	// Skip plotting and calculations of intPSKPhase(0) as this is a reference phase (9/30/2014)
@@ -3685,7 +3687,7 @@ int UpdatePhaseConstellation(short * intPhases, short * intMag, int intPSKPhase,
 // Subroutine to track 1 carrier 4FSK. Used for both single and multiple simultaneous carrier 4FSK modes.
 
 
-VOID Track1Car4FSK(short * intSamples, int * intPtr, int intSampPerSymbol, float dblSearchFreq, int intBaud, UCHAR * bytSymHistory)
+VOID Track1Car4FSK(short * intSamples, int * intPtr, int intSampPerSymbol, float dblSearchFreq, int intBaud, UCHAR * bytSymHistory) // called from here only
 {
 	// look at magnitude of the tone for bytHistory(1)  2 sample2 earlier and 2 samples later.  and pick the maximum adjusting intPtr + or - 1
 	// this seems to work fine on test Mar 16, 2015. This should handle sample rate offsets (sender to receiver) up to about 2000 ppm
@@ -3727,7 +3729,7 @@ VOID Track1Car4FSK(short * intSamples, int * intPtr, int intSampPerSymbol, float
 int pskStart = 0;
 
 
-VOID Decode1CarPSK(int Carrier, BOOL OFDM)
+VOID Decode1CarPSK(int Carrier, BOOL OFDM) // called from ofdm
 {
 	unsigned int int24Bits;
 	UCHAR bytRawData;
@@ -3903,7 +3905,7 @@ VOID Decode1CarPSK(int Carrier, BOOL OFDM)
 
 //	Function to compute PSK symbol tracking (all PSK modes, used for single or multiple carrier modes) 
 
-int Track1CarPSK(int floatCarFreq, int PSKMode, BOOL QAM, BOOL OFDM, float dblUnfilteredPhase, BOOL blnInit)
+int Track1CarPSK(int floatCarFreq, int PSKMode, BOOL QAM, BOOL OFDM, float dblUnfilteredPhase, BOOL blnInit) // called from ofdm
 {
 	// This routine initializes and tracks the phase offset per symbol and adjust intPtr +/-1 when the offset creeps to a threshold value.
 	// adjusts (by Ref) intPtr 0, -1 or +1 based on a filtering of phase offset. 
@@ -4005,12 +4007,12 @@ int Track1CarPSK(int floatCarFreq, int PSKMode, BOOL QAM, BOOL OFDM, float dblUn
 	}
 	// 'Debug.WriteLine("Filtered Phase = " & Format(dblFilteredPhaseOffset, "00.000") & "  Offset = " & Format(dblPhaseOffset, "00.000") & "  Unfiltered = " & Format(dblUnfilteredPhase, "00.000"))
 
-	return 0;
+    return 0;
 }
  
 // Function to compute the differenc of two angles 
 
-int ComputeAng1_Ang2(int intAng1, int intAng2)
+int ComputeAng1_Ang2(int intAng1, int intAng2) // called from ofdm
 {
 	// do an angle subtraction intAng1 minus intAng2 (in milliradians) 
 	// Results always between -3142 and 3142 (+/- Pi)
@@ -4029,7 +4031,7 @@ int ComputeAng1_Ang2(int intAng1, int intAng2)
 
 // Subroutine to "rotate" the phases to try and set the average offset to 0. 
 
-void CorrectPhaseForTuningOffset(short * intPhase, int intPhaseLength, int intPSKMode)
+void CorrectPhaseForTuningOffset(short * intPhase, int intPhaseLength, int intPSKMode) // called from ofdm
 {
 	// A tunning error of -1 Hz will rotate the phase calculation Clockwise ~ 64 milliradians (~4 degrees)
 	//   This corrects for:
@@ -4123,7 +4125,7 @@ void CorrectPhaseForTuningOffset(short * intPhase, int intPhaseLength, int intPS
 short intCarMagThreshold[MAXCAR] = {0};
 
 
-VOID Decode1CarQAM(int Carrier)
+VOID Decode1CarQAM(int Carrier) // called from here only
 {
 	unsigned int intData;
 	int k;
@@ -4196,7 +4198,7 @@ VOID Decode1CarQAM(int Carrier)
 //	Functions to demod all PSKData frames single or multiple carriers 
 
 
-VOID InitDemodPSK()
+VOID InitDemodPSK() // called from here only
 {
 	// Called at start of frame
 
@@ -4282,7 +4284,7 @@ void SavePSKSamples(int i);
 
 short WeightedAngleAvg(short intAng1, short intAng2);
 
-int CheckCarrierPairPSK(int Base, int Dup, int frameLen)
+int CheckCarrierPairPSK(int Base, int Dup, int frameLen) // called from here onlly
 {
 	int i, Len;
 	
@@ -4334,7 +4336,7 @@ int CheckCarrierPairPSK(int Base, int Dup, int frameLen)
 }
 
 
-void DemodPSK()
+void DemodPSK() // called from here only
 {
 	int Used[MAXCAR] = {0}, Carrier;
 	int Start = 0, i;
@@ -4571,7 +4573,7 @@ void DemodPSK()
 }
 
 // Function to demodulate one carrier for all PSK frame types
-int Demod1CarPSKChar(int Start, int Carrier)
+int Demod1CarPSKChar(int Start, int Carrier) // called from here only
 {
 	// Converts intSample to an array of differential phase and magnitude values for the Specific Carrier Freq
 	// intPtr should be pointing to the approximate start of the first reference/training symbol (1 of 3) 
@@ -4631,7 +4633,7 @@ int Demod1CarPSKChar(int Start, int Carrier)
 	return (Start - origStart);	// Symbols we've consumed
 }
 
-VOID InitDemodQAM()
+VOID InitDemodQAM() // called from here only
 {
 	// Called at start of frame
 
@@ -4675,12 +4677,12 @@ VOID InitDemodQAM()
 	}
 }
 
-int Demod1CarQAMChar(int Start, int Carrier);
+int Demod1CarQAMChar(int Start, int Carrier); // called from here only
 
 
 //	Function to average two angles using magnitude weighting
 
-short WeightedAngleAvg(short intAng1, short intAng2)
+short WeightedAngleAvg(short intAng1, short intAng2) // called from here only
 {
 	// Ang1 and Ang 2 are in the range of -3142 to + 3142 (miliradians)
 	// works but should come up with a routine that avoids Sin, Cos, Atan2
@@ -4696,7 +4698,7 @@ short WeightedAngleAvg(short intAng1, short intAng2)
 
 #ifdef MEMORYARQ
 
-void SaveQAMSamples(int i)
+void SaveQAMSamples(int i) // called from here only
 {
 	int m;
 
@@ -4724,7 +4726,7 @@ void SaveQAMSamples(int i)
 	intSumCounts[i]++;
 }
 
-void SavePSKSamples(int i)
+void SavePSKSamples(int i) // called from here onlly
 {
 	int m;
 
@@ -4750,7 +4752,7 @@ void SavePSKSamples(int i)
 
 #endif
 
-int CheckCarrierPair(int Base, int Dup, int frameLen)
+int CheckCarrierPair(int Base, int Dup, int frameLen) // called from here only
 {
 	int i, Len;
 	
@@ -4805,7 +4807,7 @@ int CheckCarrierPair(int Base, int Dup, int frameLen)
 	return Len + frameLen;
 }
 
-BOOL DemodQAM()
+BOOL DemodQAM() // called from here only
 {
 	int Used = 0;
 	int Start = 0;
@@ -5051,7 +5053,7 @@ BOOL DemodQAM()
 	return TRUE;
 }
 
-int Demod1CarQAMChar(int Start, int Carrier)
+int Demod1CarQAMChar(int Start, int Carrier) // called from here onlyl
 {
 	// Converts intSample to an array of differential phase and magnitude values for the Specific Carrier Freq
 	// intPtr should be pointing to the approximate start of the first reference/training symbol (1 of 3) 
@@ -5114,7 +5116,7 @@ extern int bytQDataInProcessLen;
 
 //	function to decode one carrier from tones (used to decode from Averaged intToneMags) 
 
-BOOL Decode1Car4FSKFromTones(UCHAR * bytData, int intToneMags)
+BOOL Decode1Car4FSKFromTones(UCHAR * bytData, int intToneMags) // called from here only
 {
     UNUSED(bytData); UNUSED(intToneMags);
 	//	Decodes intToneMags() to an array of bytes   
@@ -5213,13 +5215,13 @@ int intWaterfallRow = 0;
 
 
 
-void UpdateBusyDetector(short * bytNewSamples)
+void UpdateBusyDetector(short * bytNewSamples) // called SMMain, ARDOCPC
 {
 	float dblReF[1024];
 	float dblImF[1024];
 	float dblMag[206];
 
-	float dblMagAvg = 0;
+    float dblMagAvg = 0; UNUSED(dblMagAvg);
 	int intTuneLineLow, intTuneLineHi, intDelta;
 	int i;
 	int BusyFlag;
@@ -5287,5 +5289,122 @@ void UpdateBusyDetector(short * bytNewSamples)
 
 	blnLastBusyStatus = blnBusyStatus;
 
+}
+
+int ipow(int base, int exp)
+{
+    int result = 1;
+    while (exp)
+    {
+        if (exp & 1)
+            result *= base;
+        exp >>= 1;
+        base *= base;
+    }
+
+    return result;
+}
+
+int NumberOfBitsNeeded(int PowerOfTwo)
+{
+    int i;
+
+    for (i = 0; i <= 16; i++)
+    {
+        if ((PowerOfTwo & ipow(2, i)) != 0)
+            return i;
+
+    }
+    return 0;
+}
+
+
+int ReverseBits(int Index, int NumBits)
+{
+    int i, Rev = 0;
+
+    for (i = 0; i < NumBits; i++)
+    {
+        Rev = (Rev * 2) | (Index & 1);
+        Index = Index / 2;
+    }
+
+    return Rev;
+}
+
+
+void FourierTransform(int NumSamples, short * RealIn, float * RealOut, float * ImagOut, int InverseTransform)
+{
+    float AngleNumerator;
+    unsigned char NumBits;
+
+    int i, j, K, n, BlockSize, BlockEnd;
+    float DeltaAngle, DeltaAr;
+    float Alpha, Beta;
+    float TR, TI, AR, AI;
+
+    if (InverseTransform)
+        AngleNumerator = -2.0f * M_PI;
+    else
+        AngleNumerator = 2.0f * M_PI;
+
+    NumBits = NumberOfBitsNeeded(NumSamples);
+
+    for (i = 0; i < NumSamples; i++)
+    {
+        j = ReverseBits(i, NumBits);
+        RealOut[j] = RealIn[i];
+        ImagOut[j] = 0.0f; // Not using i in ImageIn[i];
+    }
+
+    BlockEnd = 1;
+    BlockSize = 2;
+
+    while (BlockSize <= NumSamples)
+    {
+        DeltaAngle = AngleNumerator / BlockSize;
+        Alpha = sinf(0.5f * DeltaAngle);
+        Alpha = 2.0f * Alpha * Alpha;
+        Beta = sinf(DeltaAngle);
+
+        i = 0;
+
+        while (i < NumSamples)
+        {
+            AR = 1.0f;
+            AI = 0.0f;
+
+            j = i;
+
+            for (n = 0; n < BlockEnd; n++)
+            {
+                K = j + BlockEnd;
+                TR = AR * RealOut[K] - AI * ImagOut[K];
+                TI = AI * RealOut[K] + AR * ImagOut[K];
+                RealOut[K] = RealOut[j] - TR;
+                ImagOut[K] = ImagOut[j] - TI;
+                RealOut[j] = RealOut[j] + TR;
+                ImagOut[j] = ImagOut[j] + TI;
+                DeltaAr = Alpha * AR + Beta * AI;
+                AI = AI - (Alpha * AI - Beta * AR);
+                AR = AR - DeltaAr;
+                j = j + 1;
+            }
+            i = i + BlockSize;
+        }
+        BlockEnd = BlockSize;
+        BlockSize = BlockSize * 2;
+    }
+
+    if (InverseTransform)
+    {
+        //	Normalize the resulting time samples...
+
+        for (i = 0; i < NumSamples; i++)
+        {
+            RealOut[i] = RealOut[i] / NumSamples;
+            ImagOut[i] = ImagOut[i] / NumSamples;
+        }
+    }
 }
 

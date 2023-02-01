@@ -14,7 +14,11 @@ HEADERS += ./UZ7HOStuff.h \
     ./ARDOPC.h \
     ./tcpCode.h \
     alsasound.h \
-    ossaudio.h
+    ossaudio.h \
+    soundmodem.h \
+    soundmodemcom.h \
+    soundmodemfft.h \
+    soundmodemptt.h
 
 SOURCES += ./audio.c \
     ./pulse.c \
@@ -46,7 +50,11 @@ SOURCES += ./audio.c \
     ./pktARDOP.c \
     ./BusyDetect.c \
     alsasound.cpp \
-    ossaudio.cpp
+    ossaudio.cpp \
+    soundmodem.cpp \
+    soundmodemcom.cpp \
+    soundmodemfft.cpp \
+    soundmodemptt.cpp
 
 
 

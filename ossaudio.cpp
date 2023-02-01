@@ -1,13 +1,16 @@
-#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/ioctl.h>
-#include <fcntl.h>
 #include <assert.h>
 #include <string.h>
+
+namespace stdio {
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
+};
 
 #include <errno.h>
 #ifdef __OpenBSD__
@@ -46,13 +49,13 @@ bits_per_sample(16)	/* 8 (unsigned char) or 16 (signed short). */
 }
 
 
-int OSSAudio::oss_audio_open(char * adevice_in, char * adevice_out)
+int OSSAudio::open(char * adevice_in, char * adevice_out)
 {
     char audio_in_name[30];
     char audio_out_name[30];
 
-    strncpy(audio_in_name, adevice_in, sizeof(audio_in_name));
-    strncpy(audio_out_name, adevice_out, sizeof(audio_out_name));
+    strncpy(audio_in_name, adevice_in, sizeof(audio_in_name)-1);
+    strncpy(audio_out_name, adevice_out, sizeof(audio_out_name)-1);
 
     if (strcmp(audio_in_name, audio_out_name) == 0)
     {
@@ -64,7 +67,7 @@ int OSSAudio::oss_audio_open(char * adevice_in, char * adevice_out)
         printf("Audio out device for transmit: %s\n", audio_out_name);
     }
 
-    oss_fd = open(audio_in_name, O_RDWR);
+    oss_fd = stdio::open(audio_in_name, O_RDWR);
 
     if (oss_fd < 0)
     {
@@ -74,11 +77,11 @@ int OSSAudio::oss_audio_open(char * adevice_in, char * adevice_out)
     else
         printf("OSS fd = %d\n", oss_fd);
 
-    return set_oss_params(oss_fd);
+    return setParams(oss_fd);
 }
 
 
-int OSSAudio::set_oss_params(int fd)
+int OSSAudio::setParams(int fd)
 {
     int err;
     int devcaps;
@@ -86,7 +89,7 @@ int OSSAudio::set_oss_params(int fd)
     int ossbuf_size_in_bytes;
     int frag = (5 << 16) | (11);
 
-    err = ioctl(fd, SNDCTL_DSP_SETFRAGMENT, &frag);
+    err = stdio::ioctl(fd, SNDCTL_DSP_SETFRAGMENT, &frag);
 
     if (err == -1)
     {
@@ -94,7 +97,7 @@ int OSSAudio::set_oss_params(int fd)
         //		ossbuf_size_in_bytes = 2048;	/* pick something reasonable */
     }
 
-    err = ioctl(fd, SNDCTL_DSP_CHANNELS, &num_channels);
+    err = stdio::ioctl(fd, SNDCTL_DSP_CHANNELS, &num_channels);
     if (err == -1)
     {
         perror("Not able to set audio device number of channels");
@@ -103,7 +106,7 @@ int OSSAudio::set_oss_params(int fd)
 
     asked_for = samples_per_sec;
 
-    err = ioctl(fd, SNDCTL_DSP_SPEED, &samples_per_sec);
+    err = stdio::ioctl(fd, SNDCTL_DSP_SPEED, &samples_per_sec);
     if (err == -1)
     {
 
@@ -118,7 +121,7 @@ int OSSAudio::set_oss_params(int fd)
     /* 0x8 is unsigned 8 bit samples and */
     /* 0x10 is signed 16 bit little endian. */
 
-    err = ioctl(fd, SNDCTL_DSP_SETFMT, &bits_per_sample);
+    err = stdio::ioctl(fd, SNDCTL_DSP_SETFMT, &bits_per_sample);
 
     if (err == -1)
     {
@@ -129,7 +132,7 @@ int OSSAudio::set_oss_params(int fd)
     /*
      * Determine capabilities.
      */
-    err = ioctl(fd, SNDCTL_DSP_GETCAPS, &devcaps);
+    err = stdio::ioctl(fd, SNDCTL_DSP_GETCAPS, &devcaps);
     if (err == -1)
     {
         perror("Not able to get audio device capabilities");
@@ -149,7 +152,7 @@ int OSSAudio::set_oss_params(int fd)
         // Do we care? //	return (-1);
     }
 
-    err = ioctl(fd, SNDCTL_DSP_SETDUPLEX, NULL);
+    err = stdio::ioctl(fd, SNDCTL_DSP_SETDUPLEX, NULL);
     if (err == -1)
     {
         perror("Not able to set audio full duplex mode");
@@ -172,7 +175,7 @@ int OSSAudio::set_oss_params(int fd)
      */
 
 
-    err = ioctl(fd, SNDCTL_DSP_GETBLKSIZE, &ossbuf_size_in_bytes);
+    err = stdio::ioctl(fd, SNDCTL_DSP_GETBLKSIZE, &ossbuf_size_in_bytes);
     if (err == -1)
     {
         perror("Not able to get audio block size");
@@ -203,7 +206,7 @@ int OSSAudio::set_oss_params(int fd)
 }
 
 
-int OSSAudio::oss_read(short * samples, int nSamples)
+int OSSAudio::read(short * samples, int nSamples)
 {
     int n;
     int nBytes = nSamples * 4;
@@ -213,7 +216,7 @@ int OSSAudio::oss_read(short * samples, int nSamples)
 
     //	printf("audio_get(): read %d\n", nBytes - insize);
 
-    n = read(oss_fd, &rxbuffer[insize], nBytes - insize);
+    n = stdio::read(oss_fd, &rxbuffer[insize], nBytes - insize);
 
     if (n < 0)
     {
@@ -236,7 +239,7 @@ int OSSAudio::oss_read(short * samples, int nSamples)
 }
 
 
-int OSSAudio::oss_write(short * ptr, int len)
+int OSSAudio::write(short * ptr, int len)
 {
     int k;
 
@@ -244,7 +247,7 @@ int OSSAudio::oss_write(short * ptr, int len)
 //	ioctl(oss_fd, SNDCTL_DSP_GETODELAY, &delay);
 //	Debugprintf("Delay %d", delay);
 
-    k = write(oss_fd, ptr, len * 4);
+    k = stdio::write(oss_fd, ptr, len * 4);
 
 //
     if (k < 0)
@@ -256,7 +259,7 @@ int OSSAudio::oss_write(short * ptr, int len)
     {
         printf("oss_write(): write %d returns %d\n", len * 4, k);
         /* presumably full but didn't block. */
-        usleep(10000);
+        stdio::usleep(10000);
     }
     ptr += k; // what is this here?
     len -= k;
@@ -264,7 +267,7 @@ int OSSAudio::oss_write(short * ptr, int len)
     return 0;
 }
 
-void OSSAudio::oss_flush()
+void OSSAudio::flush()
 {
     int delay;
 
@@ -274,22 +277,22 @@ void OSSAudio::oss_flush()
             return;
     }
 
-    ioctl(oss_fd, SNDCTL_DSP_GETODELAY, &delay);
+    stdio::ioctl(oss_fd, SNDCTL_DSP_GETODELAY, &delay);
     Debugprintf("OSS Flush Delay %d", delay);
 
     while (delay)
     {
         Sleep(10);
-        ioctl(oss_fd, SNDCTL_DSP_GETODELAY, &delay);
+        stdio::ioctl(oss_fd, SNDCTL_DSP_GETODELAY, &delay);
 //		Debugprintf("Flush Delay %d", delay);
     }
 }
 
-void OSSAudio::oss_audio_close(void)
+void OSSAudio::close(void)
 {
     if (oss_fd > 0)
     {
-        close(oss_fd);
+        stdio::close(oss_fd);
         oss_fd = -1;
     }
     return;
